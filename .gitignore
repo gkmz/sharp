@@ -1,0 +1,7 @@
+sharp
+sharp-output.txt
+dist/
+build/
+*.test
+*.out
+.DS_Store
