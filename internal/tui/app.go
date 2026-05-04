@@ -1259,8 +1259,13 @@ func (m *model) pasteInput() {
 		m.status = errorStyle.Render("paste failed: " + err.Error())
 		return
 	}
+	before := p.Status()
 	p.SetInput(text)
-	m.status = successStyle.Render("pasted clipboard to input")
+	if p.Status() != before {
+		m.status = p.Status()
+	} else {
+		m.status = successStyle.Render("pasted clipboard to input")
+	}
 }
 
 func (m *model) categoryStatus() string {
@@ -1389,12 +1394,14 @@ type genericToolPage struct {
 	inputRedo   []string
 	width       int
 	inputBoxH   int
+	actionsBoxH int
 	optionsBoxH int
 	outputBoxH  int
 	focus       pageFocus
 	editing     bool
 	status      string
 	hasOptions  bool
+	hasInput    bool
 }
 
 type pageFocus int
@@ -1435,28 +1442,37 @@ func newGenericToolPage(t tool.Tool) *genericToolPage {
 		options:    tool.Options{},
 		status:     "Enter/i edit | o options | r run | y copy | s save | p pipe",
 		hasOptions: len(t.Options()) > 0,
+		hasInput:   toolUsesInput(t),
 	}
 	p.loadSelectedOptions()
 	return p
 }
 
 func (p *genericToolPage) SetSize(width, height int) {
-	// 内部 Input/Options/Output 也用固定边框，组件尺寸必须按边框内侧计算。
+	// 内部各块都用固定边框，组件尺寸必须按边框内侧计算。
 	p.width = max(18, width)
+	p.actionsBoxH = 3
 	p.optionsBoxH = 0
 	if p.hasOptions {
 		p.optionsBoxH = clamp(3+len(p.tool.Options()), 4, max(4, height/4))
 	}
-	remaining := max(6, height-p.optionsBoxH)
-	p.inputBoxH = max(5, remaining/2)
-	p.outputBoxH = max(5, height-p.optionsBoxH-p.inputBoxH)
-	if p.outputBoxH < 5 {
-		p.outputBoxH = 5
-		p.inputBoxH = max(5, height-p.optionsBoxH-p.outputBoxH)
+	p.inputBoxH = 0
+	if p.hasInput {
+		remaining := max(6, height-p.optionsBoxH-p.actionsBoxH)
+		p.inputBoxH = max(5, remaining/2)
+		p.outputBoxH = max(5, height-p.optionsBoxH-p.actionsBoxH-p.inputBoxH)
+		if p.outputBoxH < 5 {
+			p.outputBoxH = 5
+			p.inputBoxH = max(5, height-p.optionsBoxH-p.actionsBoxH-p.outputBoxH)
+		}
+	} else {
+		p.outputBoxH = max(5, height-p.optionsBoxH-p.actionsBoxH)
 	}
 	innerWidth := max(16, p.width-2)
 	p.input.SetWidth(innerWidth)
-	p.input.SetHeight(max(3, panelContentHeight(p.inputBoxH)))
+	if p.hasInput {
+		p.input.SetHeight(max(3, panelContentHeight(p.inputBoxH)))
+	}
 	p.optionBox.Width = max(16, innerWidth)
 	p.output.Width = innerWidth
 	p.output.Height = max(3, panelContentHeight(p.outputBoxH))
@@ -1506,8 +1522,10 @@ func (p *genericToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 }
 
 func (p *genericToolPage) View() string {
-	blocks := make([]string, 0, 3)
-	blocks = append(blocks, panelBoxTitle("Input", p.focus == pageFocusInput, p.input.View(), p.width, p.inputBoxH))
+	blocks := make([]string, 0, 4)
+	if p.hasInput {
+		blocks = append(blocks, panelBoxTitle("Input", p.focus == pageFocusInput, p.input.View(), p.width, p.inputBoxH))
+	}
 
 	if p.hasOptions {
 		var b strings.Builder
@@ -1529,11 +1547,29 @@ func (p *genericToolPage) View() string {
 		// 无参数工具不再占一整块区域，把高度留给输入/输出。
 	}
 
+	blocks = append(blocks, panelBoxTitle("Actions", false, p.actionsView(), p.width, p.actionsBoxH))
 	blocks = append(blocks, panelBoxTitle("Output", p.focus == pageFocusOutput, p.output.View(), p.width, p.outputBoxH))
 	return lipgloss.JoinVertical(lipgloss.Left, blocks...)
 }
 
+func (p *genericToolPage) actionsView() string {
+	hints := []string{statusHint("r", "run"), statusHint("y", "copy"), statusHint("s", "save")}
+	if p.hasInput {
+		hints = append(hints, statusHint("v", "paste"), statusHint("x", "clear in"), statusHint("p", "pipe"))
+	}
+	hints = append(hints, statusHint("X", "clear out"))
+	return strings.Join(hints, "  ")
+}
+
 func (p *genericToolPage) FocusInput() {
+	if !p.hasInput {
+		if p.hasOptions {
+			p.FocusOptions()
+			return
+		}
+		p.FocusOutput()
+		return
+	}
 	p.focus = pageFocusInput
 	p.editing = true
 	p.optionBox.Blur()
@@ -1567,7 +1603,11 @@ func (p *genericToolPage) FocusNext() {
 	case pageFocusOptions:
 		p.FocusOutput()
 	case pageFocusOutput:
-		p.FocusInput()
+		if p.hasInput {
+			p.FocusInput()
+		} else if p.hasOptions {
+			p.FocusOptions()
+		}
 	}
 }
 
@@ -1576,11 +1616,15 @@ func (p *genericToolPage) FocusPrev() {
 	case pageFocusInput:
 		p.FocusOutput()
 	case pageFocusOptions:
-		p.FocusInput()
+		if p.hasInput {
+			p.FocusInput()
+		} else {
+			p.FocusOutput()
+		}
 	case pageFocusOutput:
 		if p.hasOptions {
 			p.FocusOptions()
-		} else {
+		} else if p.hasInput {
 			p.FocusInput()
 		}
 	}
@@ -1595,10 +1639,16 @@ func (p *genericToolPage) OutputHalfPageUp() {
 }
 
 func (p *genericToolPage) InputHalfPageDown() {
+	if !p.hasInput {
+		return
+	}
 	textareaHalfPageDown(&p.input)
 }
 
 func (p *genericToolPage) InputHalfPageUp() {
+	if !p.hasInput {
+		return
+	}
 	textareaHalfPageUp(&p.input)
 }
 
@@ -1619,12 +1669,20 @@ func (p *genericToolPage) Run() {
 }
 
 func (p *genericToolPage) SetInput(value string) {
+	if !p.hasInput {
+		p.status = dimStyle.Render("this tool has no input")
+		return
+	}
 	p.pushInputUndo()
 	p.input.SetValue(value)
 	p.inputRedo = nil
 }
 
 func (p *genericToolPage) ClearInput() {
+	if !p.hasInput {
+		p.status = dimStyle.Render("this tool has no input")
+		return
+	}
 	p.pushInputUndo()
 	p.input.SetValue("")
 	p.inputRedo = nil
@@ -1661,8 +1719,16 @@ func (p *genericToolPage) HelpText() string {
 func (p *genericToolPage) HelpCommands() []helpCommand {
 	commands := []helpCommand{
 		{Key: "r", Command: "Run Tool", Description: "Run " + p.tool.Name() + " with current input and options."},
-		{Key: "p", Command: "Pipe Output", Description: "Move output into input for another run."},
 		{Key: "s", Command: "Save Output", Description: "Save trimmed output to sharp-output.txt."},
+		{Key: "y", Command: "Copy Output", Description: "Copy trimmed output text."},
+		{Key: "X", Command: "Clear Output", Description: "Clear the current output."},
+	}
+	if p.hasInput {
+		commands = append(commands,
+			helpCommand{Key: "i/Enter", Command: "Edit Input", Description: "Enter insert mode for the input editor."},
+			helpCommand{Key: "v", Command: "Paste Input", Description: "Paste clipboard data into the input editor."},
+			helpCommand{Key: "p", Command: "Pipe Output", Description: "Move output into input for another run."},
+		)
 	}
 	if p.hasOptions {
 		commands = append(commands, helpCommand{Key: "o", Command: "Edit Options", Description: "Edit option=value pairs for this tool."})
@@ -1671,6 +1737,16 @@ func (p *genericToolPage) HelpCommands() []helpCommand {
 }
 
 func (p *genericToolPage) FooterHints() string {
+	if !p.hasInput {
+		return statusLine(p.tool.Name(),
+			statusHint("r", "run"),
+			statusHint("o", "options"),
+			statusHint("y", "copy"),
+			statusHint("s", "save"),
+			statusHint("X", "clear out"),
+			statusHint("?", "help"),
+		)
+	}
 	return ""
 }
 
@@ -1679,6 +1755,9 @@ func (p *genericToolPage) IsEditing() bool {
 }
 
 func (p *genericToolPage) trackInputChange(before string) {
+	if !p.hasInput {
+		return
+	}
 	after := p.input.Value()
 	if after == before {
 		return
@@ -1764,6 +1843,15 @@ func (p *genericToolPage) parseOptions() {
 		if ok {
 			p.options[k] = v
 		}
+	}
+}
+
+func toolUsesInput(t tool.Tool) bool {
+	switch t.ID() {
+	case "time.now", "uuid.v4", "password", "token":
+		return false
+	default:
+		return true
 	}
 }
 

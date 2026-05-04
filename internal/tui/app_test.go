@@ -71,6 +71,62 @@ func TestGenericToolPageWrapsRenderedOutput(t *testing.T) {
 	}
 }
 
+func TestGenericToolPageHidesInputForGenerators(t *testing.T) {
+	page := newGenericToolPage(tool.SimpleTool{
+		IDValue:          "uuid.v4",
+		NameValue:        "UUID v4",
+		CategoryValue:    tool.CategoryGenerator,
+		DescriptionValue: "generate uuid",
+		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
+			if input.Text != "" {
+				t.Fatalf("generator received input %q, want empty", input.Text)
+			}
+			return tool.Output{Text: "id"}, nil
+		},
+	})
+	page.SetSize(40, 12)
+	view := stripANSI(page.View())
+	if strings.Contains(view, "Input") {
+		t.Fatalf("View() = %q, should hide Input for uuid generator", view)
+	}
+	if !strings.Contains(view, "Actions") || !strings.Contains(view, "Output") {
+		t.Fatalf("View() = %q, want Actions and Output blocks", view)
+	}
+
+	page.SetInput("ignored")
+	if page.input.Value() != "" {
+		t.Fatalf("input after SetInput on no-input tool = %q, want empty", page.input.Value())
+	}
+	page.Run()
+	if got, want := page.OutputText(), "id"; got != want {
+		t.Fatalf("OutputText() = %q, want %q", got, want)
+	}
+}
+
+func TestGenericToolPageShowsOptionsWithoutInput(t *testing.T) {
+	page := newGenericToolPage(tool.SimpleTool{
+		IDValue:          "password",
+		NameValue:        "Random Password",
+		CategoryValue:    tool.CategoryGenerator,
+		DescriptionValue: "generate password",
+		OptionsValue:     []tool.Option{{Name: "length", Description: "Password length", Default: "24"}},
+		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
+			if input.Text != "" {
+				t.Fatalf("password received input %q, want empty", input.Text)
+			}
+			return tool.Output{Text: options["length"]}, nil
+		},
+	})
+	page.SetSize(40, 14)
+	view := stripANSI(page.View())
+	if strings.Contains(view, "Input") {
+		t.Fatalf("View() = %q, should hide Input for password generator", view)
+	}
+	if !strings.Contains(view, "Options") || !strings.Contains(view, "length=24") {
+		t.Fatalf("View() = %q, want options block", view)
+	}
+}
+
 func TestWrapDisplayTextUsesTerminalWidth(t *testing.T) {
 	if got, want := wrapDisplayText("中文abcd", 4), "中文\nabcd"; got != want {
 		t.Fatalf("wrapDisplayText() = %q, want %q", got, want)
