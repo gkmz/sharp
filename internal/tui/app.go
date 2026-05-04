@@ -33,6 +33,17 @@ type tabItem struct {
 	Tool tool.Tool
 }
 
+type helpCommand struct {
+	Key         string
+	Command     string
+	Description string
+}
+
+type helpSection struct {
+	Title    string
+	Commands []helpCommand
+}
+
 type toolPage interface {
 	SetSize(width, height int)
 	Update(msg tea.Msg) (toolPage, tea.Cmd)
@@ -49,7 +60,10 @@ type toolPage interface {
 	OutputText() string
 	Status() string
 	HelpText() string
+	HelpCommands() []helpCommand
+	FooterHints() string
 	IsEditing() bool
+	HandleKey(string) bool
 }
 
 type model struct {
@@ -65,7 +79,10 @@ type model struct {
 	searchFrom focus
 
 	search textinput.Model
+	help   textinput.Model
 	pages  map[string]toolPage
+
+	showHelp bool
 
 	width  int
 	height int
@@ -94,12 +111,16 @@ func newModel(registry *tool.Registry) model {
 	search := textinput.New()
 	search.Placeholder = "Search categories or tools"
 	search.Blur()
+	help := textinput.New()
+	help.Placeholder = "Filter commands"
+	help.Blur()
 
 	m := model{
 		registry:     registry,
 		lastTabByCat: make(map[tool.Category]int),
 		pages:        make(map[string]toolPage),
 		search:       search,
+		help:         help,
 		status:       "1 search | 2 categories | 3 tools | 4 workspace | q quit",
 	}
 	m.allCategories = buildCategories(registry.All())
@@ -122,6 +143,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
+		}
+		if m.showHelp {
+			switch msg.String() {
+			case "esc", "?":
+				m.showHelp = false
+				m.help.Blur()
+				return m, nil
+			case "ctrl+u":
+				m.help.SetValue("")
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.help, cmd = m.help.Update(msg)
+			return m, cmd
 		}
 
 		if m.focus == focusSearch {
@@ -193,9 +228,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case focusTabs:
 			switch msg.String() {
 			case "l", "right", "]":
-				m.moveTab(1)
+				if !m.currentCategoryIsJSON() {
+					m.moveTab(1)
+				}
 			case "h", "left", "[":
-				m.moveTab(-1)
+				if !m.currentCategoryIsJSON() {
+					m.moveTab(-1)
+				}
 			case "tab":
 				m.focus = focusWorkspace
 			case "enter":
@@ -218,14 +257,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "y":
 				m.copyOutput()
 			case "s":
-				m.saveOutput()
+				if p := m.currentPage(); p != nil && p.HandleKey(msg.String()) {
+					m.status = p.Status()
+				} else {
+					m.saveOutput()
+				}
 			case "p":
-				m.pipeOutput()
+				if p := m.currentPage(); p != nil && p.HandleKey(msg.String()) {
+					m.status = p.Status()
+				} else {
+					m.pipeOutput()
+				}
 			case "esc":
 				m.focus = focusCategories
 			case "?":
-				if p := m.currentPage(); p != nil {
-					m.status = p.HelpText()
+				m.openHelp()
+			default:
+				if p := m.currentPage(); p != nil && p.HandleKey(msg.String()) {
+					m.status = p.Status()
 				}
 			}
 		case focusWorkspace:
@@ -248,7 +297,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				p.Run()
 				m.status = p.Status()
 			case "v":
-				m.pasteInput()
+				if p.HandleKey(msg.String()) {
+					m.status = p.Status()
+				} else {
+					m.pasteInput()
+				}
 			case "x":
 				p.ClearInput()
 				m.status = successStyle.Render("cleared input")
@@ -258,11 +311,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "y":
 				m.copyOutput()
 			case "s":
-				m.saveOutput()
+				if p.HandleKey(msg.String()) {
+					m.status = p.Status()
+				} else {
+					m.saveOutput()
+				}
 			case "p":
-				m.pipeOutput()
+				if p.HandleKey(msg.String()) {
+					m.status = p.Status()
+				} else {
+					m.pipeOutput()
+				}
 			case "?":
-				m.status = p.HelpText()
+				m.openHelp()
+			default:
+				if p.HandleKey(msg.String()) {
+					m.status = p.Status()
+				}
 			}
 		}
 	}
@@ -294,7 +359,11 @@ func (m model) View() string {
 	right := lipgloss.JoinVertical(lipgloss.Left, tabs, page)
 	footer := footerStyle.Render(m.footerLine())
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
-	return fitHeight(body+"\n"+footer, m.height)
+	view := body + "\n" + footer
+	if m.showHelp {
+		view = overlayPanel(view, m.helpView(), m.width, m.height)
+	}
+	return fitHeight(view, m.height)
 }
 
 func (m *model) resize() {
@@ -307,6 +376,7 @@ func (m *model) resize() {
 		p.SetSize(rightWidth-2, max(4, panelContentHeight(workspaceHeight)-4))
 	}
 	m.search.Width = max(10, clamp(m.width*20/100, 22, max(22, m.width-60))-4)
+	m.help.Width = max(18, min(42, m.width-10))
 }
 
 func (m model) searchView(width, height int) string {
@@ -356,14 +426,24 @@ func (m model) tabsView(width, height int) string {
 	if cat == nil {
 		return dimStyle.Render("No category selected")
 	}
+	if cat.Category == tool.CategoryJSON {
+		return flowLabels(width, height, []string{"Workspace", "Actions", "Raw Tools"}, 0)
+	}
 
+	labels := make([]string, 0, len(cat.Tabs))
+	for _, tab := range cat.Tabs {
+		labels = append(labels, tab.Tool.Name())
+	}
+	return flowLabels(width, height, labels, m.selectedTab)
+}
+
+func flowLabels(width, height int, labels []string, selected int) string {
 	var b strings.Builder
 	lineWidth := 0
 	lines := 0
 	// 工具区按标签宽度流式排布：一行放不下才换行，类似 lazygit 顶部 tab 标题。
-	for i := 0; i < len(cat.Tabs); i++ {
-		tab := cat.Tabs[i]
-		label := trimToWidth(tab.Tool.Name(), max(8, min(24, width)))
+	for i, labelText := range labels {
+		label := trimToWidth(labelText, max(8, min(24, width)))
 		cellWidth := len(label) + 2
 		separator := 1
 		if lineWidth == 0 {
@@ -382,13 +462,13 @@ func (m model) tabsView(width, height int) string {
 			lineWidth++
 		}
 		cell := " " + label + " "
-		if i == m.selectedTab {
+		if i == selected {
 			b.WriteString(activeLabelStyle.Render(cell))
 		} else {
 			b.WriteString(dimStyle.Render(cell))
 		}
 		lineWidth += cellWidth
-		if lines >= height && i < len(cat.Tabs)-1 {
+		if lines >= height && i < len(labels)-1 {
 			break
 		}
 	}
@@ -400,11 +480,25 @@ func (m model) toolRows(width int) int {
 	if cat == nil || width <= 0 {
 		return 1
 	}
+	if cat.Category == tool.CategoryJSON {
+		return labelRows(width, []string{"Workspace", "Actions", "Raw Tools"})
+	}
+	labels := make([]string, 0, len(cat.Tabs))
+	for _, tab := range cat.Tabs {
+		labels = append(labels, tab.Tool.Name())
+	}
+	return labelRows(width, labels)
+}
+
+func labelRows(width int, labels []string) int {
+	if len(labels) == 0 || width <= 0 {
+		return 1
+	}
 	rows := 1
 	lineWidth := 0
 	// 先用同一套显示宽度规则预估工具标签需要几行，再把剩余高度全部交给 Workspace。
-	for _, tab := range cat.Tabs {
-		label := trimToWidth(tab.Tool.Name(), max(8, min(24, width)))
+	for _, labelText := range labels {
+		label := trimToWidth(labelText, max(8, min(24, width)))
 		cellWidth := len(label) + 2
 		separator := 0
 		if lineWidth > 0 {
@@ -438,12 +532,18 @@ func (m model) pageView(width, height int) string {
 
 func (m model) tabsTitle() string {
 	if cat := m.currentCategory(); cat != nil {
+		if cat.Category == tool.CategoryJSON {
+			return "JSON Pages"
+		}
 		return "Tools - " + string(cat.Category)
 	}
 	return "Tools"
 }
 
 func (m model) footerLine() string {
+	if m.showHelp {
+		return "HELP | type to filter | Ctrl+u clear | Esc/? close"
+	}
 	switch m.focus {
 	case focusSearch:
 		return "1 search | Esc close | Enter accept"
@@ -461,10 +561,89 @@ func (m model) footerLine() string {
 			if p.IsEditing() {
 				return "Esc exit edit | Tab input/output | / and numbers are text"
 			}
+			if hints := p.FooterHints(); hints != "" {
+				return hints
+			}
 			return "1 search | 2 categories | 3 tools | 4 workspace | i edit | v paste | x clear input | X clear output | r run | y copy"
 		}
 	}
 	return m.status
+}
+
+func (m model) helpView() string {
+	commands := m.helpCommands()
+	query := strings.ToLower(strings.TrimSpace(m.help.Value()))
+	filtered := make([]helpCommand, 0, len(commands))
+	for _, cmd := range commands {
+		haystack := strings.ToLower(cmd.Key + " " + cmd.Command + " " + cmd.Description)
+		if query == "" || strings.Contains(haystack, query) {
+			filtered = append(filtered, cmd)
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString(sectionLabel("Filter", true, true) + " ")
+	b.WriteString(m.help.View() + "\n")
+	b.WriteString(dimStyle.Render("Esc/? close | Ctrl+u clear filter") + "\n")
+	b.WriteString(sectionRuleStyle.Render(strings.Repeat("-", 64)) + "\n")
+	if len(filtered) == 0 {
+		b.WriteString(dimStyle.Render("No matching commands") + "\n")
+		return b.String()
+	}
+	for _, cmd := range filtered {
+		key := activeLabelStyle.Render(" " + cmd.Key + " ")
+		line := fmt.Sprintf("%-18s %s", cmd.Command, cmd.Description)
+		b.WriteString(key + " " + line + "\n")
+	}
+	return b.String()
+}
+
+func (m model) helpCommands() []helpCommand {
+	commands := []helpCommand{
+		{Key: "1", Command: "Search Area", Description: "Focus global category/tool search."},
+		{Key: "2", Command: "Categories", Description: "Focus category list."},
+		{Key: "3", Command: "Pages/Tools", Description: "Focus page or tool strip."},
+		{Key: "4", Command: "Workspace", Description: "Focus current workspace."},
+		{Key: "?", Command: "Help", Description: "Open or close this command help."},
+		{Key: "q", Command: "Quit", Description: "Quit sharp from normal mode."},
+		{Key: "Esc", Command: "Back", Description: "Leave edit mode, close overlays, or move focus back."},
+	}
+	switch m.focus {
+	case focusCategories:
+		commands = append(commands,
+			helpCommand{Key: "j/down", Command: "Next Category", Description: "Move category selection down."},
+			helpCommand{Key: "k/up", Command: "Previous Category", Description: "Move category selection up."},
+			helpCommand{Key: "Enter", Command: "Open Pages", Description: "Move focus to area 3."},
+		)
+	case focusTabs:
+		commands = append(commands,
+			helpCommand{Key: "h/left", Command: "Previous", Description: "Select previous tool for non-workbench categories."},
+			helpCommand{Key: "l/right", Command: "Next", Description: "Select next tool for non-workbench categories."},
+			helpCommand{Key: "Enter/i", Command: "Edit Input", Description: "Focus workspace input editor."},
+			helpCommand{Key: "o", Command: "Edit Options", Description: "Focus options or path editor when available."},
+		)
+	case focusWorkspace:
+		commands = append(commands,
+			helpCommand{Key: "i/Enter", Command: "Edit Input", Description: "Enter insert mode for input."},
+			helpCommand{Key: "o", Command: "Edit Options", Description: "Edit options or JSON path."},
+			helpCommand{Key: "Tab", Command: "Next Field", Description: "Cycle input, options/path, and output."},
+			helpCommand{Key: "Shift+Tab", Command: "Previous Field", Description: "Cycle fields backward."},
+			helpCommand{Key: "v", Command: "Paste", Description: "Paste clipboard into input."},
+			helpCommand{Key: "x", Command: "Clear Input", Description: "Clear the current input."},
+			helpCommand{Key: "X", Command: "Clear Output", Description: "Clear the current output."},
+			helpCommand{Key: "y", Command: "Copy Output", Description: "Copy trimmed output text."},
+			helpCommand{Key: "r", Command: "Run", Description: "Run default action for this page."},
+		)
+	}
+	if p := m.currentPage(); p != nil {
+		commands = append(commands, p.HelpCommands()...)
+	}
+	return commands
+}
+
+func (m *model) openHelp() {
+	m.showHelp = true
+	m.help.Focus()
 }
 
 func panelBox(num int, title string, active bool, content string, width, height int) string {
@@ -495,6 +674,58 @@ func panelBox(num int, title string, active bool, content string, width, height 
 	}
 	lines = append(lines, bottom)
 	return strings.Join(lines, "\n")
+}
+
+func overlayPanel(base string, overlay string, width, height int) string {
+	if width <= 0 || height <= 0 {
+		return base
+	}
+	boxWidth := clamp(width*70/100, 46, max(46, width-4))
+	boxHeight := clamp(height*70/100, 10, max(10, height-2))
+	box := panelBox(0, "Help", true, overlay, boxWidth, boxHeight)
+	baseLines := fixedLines(base, width, height)
+	boxLines := strings.Split(box, "\n")
+	top := max(0, (height-boxHeight)/2)
+	left := max(0, (width-boxWidth)/2)
+	for i, line := range boxLines {
+		row := top + i
+		if row >= len(baseLines) {
+			break
+		}
+		prefix := truncateDisplay(baseLines[row], left)
+		if lipgloss.Width(prefix) < left {
+			prefix += strings.Repeat(" ", left-lipgloss.Width(prefix))
+		}
+		suffixStart := min(width, left+boxWidth)
+		suffix := ""
+		if suffixStart < width {
+			suffix = cutDisplayLeft(baseLines[row], suffixStart)
+			suffix = truncateDisplay(suffix, width-suffixStart)
+		}
+		baseLines[row] = fitWidth(prefix+line+suffix, width)
+	}
+	return strings.Join(baseLines, "\n")
+}
+
+func cutDisplayLeft(s string, width int) string {
+	if width <= 0 {
+		return s
+	}
+	remaining := width
+	for i, r := range s {
+		rw := lipgloss.Width(string(r))
+		if rw == 0 {
+			continue
+		}
+		if remaining-rw < 0 {
+			return s[i:]
+		}
+		remaining -= rw
+		if remaining == 0 {
+			return s[i+len(string(r)):]
+		}
+	}
+	return ""
 }
 
 func panelContentHeight(outerHeight int) int {
@@ -641,6 +872,11 @@ func (m *model) currentCategory() *categoryGroup {
 	return &m.categories[m.selectedCat]
 }
 
+func (m *model) currentCategoryIsJSON() bool {
+	cat := m.currentCategory()
+	return cat != nil && cat.Category == tool.CategoryJSON
+}
+
 func (m *model) currentTab() *tabItem {
 	cat := m.currentCategory()
 	if cat == nil || len(cat.Tabs) == 0 || m.selectedTab < 0 || m.selectedTab >= len(cat.Tabs) {
@@ -655,10 +891,13 @@ func (m *model) currentPage() toolPage {
 		return nil
 	}
 	id := tab.Tool.ID()
+	if tab.Tool.Category() == tool.CategoryJSON {
+		id = "json.workspace"
+	}
 	if p, ok := m.pages[id]; ok {
 		return p
 	}
-	p := newToolPage(tab.Tool)
+	p := m.newToolPage(tab.Tool)
 	m.pages[id] = p
 	return p
 }
@@ -668,7 +907,28 @@ func (m *model) setCurrentPage(p toolPage) {
 	if tab == nil || p == nil {
 		return
 	}
-	m.pages[tab.Tool.ID()] = p
+	id := tab.Tool.ID()
+	if tab.Tool.Category() == tool.CategoryJSON {
+		id = "json.workspace"
+	}
+	m.pages[id] = p
+}
+
+func (m *model) newToolPage(t tool.Tool) toolPage {
+	if t.Category() == tool.CategoryJSON {
+		tools := make(map[string]tool.Tool)
+		for _, c := range m.allCategories {
+			if c.Category != tool.CategoryJSON {
+				continue
+			}
+			for _, tab := range c.Tabs {
+				tools[tab.Tool.ID()] = tab.Tool
+			}
+			break
+		}
+		return newJSONToolPage(t, tools)
+	}
+	return newToolPage(t)
 }
 
 func (m *model) rebuildPage() {
@@ -1041,8 +1301,24 @@ func (p *genericToolPage) HelpText() string {
 	return fmt.Sprintf("%s | Esc back/exit edit | Tab field | r run | y copy | s save | p pipe", p.tool.Name())
 }
 
+func (p *genericToolPage) HelpCommands() []helpCommand {
+	commands := []helpCommand{
+		{Key: "r", Command: "Run Tool", Description: "Run " + p.tool.Name() + " with current input and options."},
+		{Key: "p", Command: "Pipe Output", Description: "Move output into input for another run."},
+		{Key: "s", Command: "Save Output", Description: "Save trimmed output to sharp-output.txt."},
+	}
+	if p.hasOptions {
+		commands = append(commands, helpCommand{Key: "o", Command: "Edit Options", Description: "Edit option=value pairs for this tool."})
+	}
+	return commands
+}
+
 func (p *genericToolPage) IsEditing() bool {
 	return p.editing
+}
+
+func (p *genericToolPage) HandleKey(key string) bool {
+	return false
 }
 
 func (p *genericToolPage) optionHeight() int {
@@ -1081,6 +1357,327 @@ func (p *genericToolPage) parseOptions() {
 	}
 }
 
+type jsonToolPage struct {
+	input      textarea.Model
+	pathBox    textinput.Model
+	output     viewport.Model
+	tools      map[string]tool.Tool
+	width      int
+	focus      pageFocus
+	editing    bool
+	inputUndo  []string
+	outputText string
+	outputErr  bool
+	status     string
+	lastAction string
+}
+
+func newJSONToolPage(t tool.Tool, tools map[string]tool.Tool) *jsonToolPage {
+	input := textarea.New()
+	input.Placeholder = ""
+	input.ShowLineNumbers = false
+	input.SetHeight(8)
+	input.Blur()
+
+	pathBox := textinput.New()
+	pathBox.Placeholder = "gjson path, e.g. data.user.name"
+	pathBox.Blur()
+
+	p := &jsonToolPage{
+		input:   input,
+		pathBox: pathBox,
+		output:  viewport.New(80, 12),
+		tools:   tools,
+		status:  "JSON Workspace | i edit | v paste | p pretty | m minify | c check | e escape | a apply",
+	}
+	if _, ok := p.tools[t.ID()]; !ok {
+		p.tools[t.ID()] = t
+	}
+	return p
+}
+
+func (p *jsonToolPage) SetSize(width, height int) {
+	// JSON 工作台同样保持输入/输出上下分布，Path 行和 Actions 行固定占用少量高度。
+	p.width = max(18, width)
+	actionHeight := lipgloss.Height(p.actionsView())
+	inputHeight := max(3, height/2-2)
+	outputHeight := max(3, height-inputHeight-actionHeight-5)
+	p.input.SetWidth(max(18, width))
+	p.input.SetHeight(inputHeight)
+	p.pathBox.Width = max(18, width-10)
+	p.output.Width = max(18, width)
+	p.output.Height = outputHeight
+	p.renderOutput()
+}
+
+func (p *jsonToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		p.SetSize(msg.Width, msg.Height)
+		return p, nil
+	case tea.KeyMsg:
+		if msg.String() == "esc" {
+			p.stopEditing()
+			return p, nil
+		}
+		if !p.editing {
+			if p.focus == pageFocusOutput {
+				var cmd tea.Cmd
+				p.output, cmd = p.output.Update(msg)
+				return p, cmd
+			}
+			return p, nil
+		}
+		switch p.focus {
+		case pageFocusInput:
+			var cmd tea.Cmd
+			p.input, cmd = p.input.Update(msg)
+			return p, cmd
+		case pageFocusOptions:
+			var cmd tea.Cmd
+			p.pathBox, cmd = p.pathBox.Update(msg)
+			return p, cmd
+		}
+	}
+	return p, nil
+}
+
+func (p *jsonToolPage) View() string {
+	var b strings.Builder
+	b.WriteString(sectionLabel("Input", p.focus == pageFocusInput, p.editing) + "\n")
+	b.WriteString(p.input.View() + "\n")
+	b.WriteString(sectionLabel("Path", p.focus == pageFocusOptions, p.editing) + " ")
+	if p.focus == pageFocusOptions || p.editing {
+		b.WriteString(p.pathBox.View() + "\n")
+	} else {
+		value := p.pathBox.Value()
+		if value == "" {
+			value = "gjson path"
+		}
+		b.WriteString(dimStyle.Render(value) + "\n")
+	}
+	b.WriteString(p.actionsView() + "\n")
+	if p.lastAction != "" {
+		b.WriteString(dimStyle.Render("Last: "+p.lastAction+" | actions read Input; [a] promotes Output to Input") + "\n")
+	}
+	b.WriteString(sectionLabel("Output", p.focus == pageFocusOutput, false) + "\n")
+	b.WriteString(p.output.View())
+	return b.String()
+}
+
+func (p *jsonToolPage) FocusInput() {
+	p.focus = pageFocusInput
+	p.editing = true
+	p.pathBox.Blur()
+	p.input.Focus()
+}
+
+func (p *jsonToolPage) FocusOptions() {
+	p.focus = pageFocusOptions
+	p.editing = true
+	p.input.Blur()
+	p.pathBox.Focus()
+}
+
+func (p *jsonToolPage) FocusOutput() {
+	p.focus = pageFocusOutput
+	p.stopEditing()
+}
+
+func (p *jsonToolPage) FocusNext() {
+	switch p.focus {
+	case pageFocusInput:
+		p.FocusOptions()
+	case pageFocusOptions:
+		p.FocusOutput()
+	case pageFocusOutput:
+		p.FocusInput()
+	}
+}
+
+func (p *jsonToolPage) FocusPrev() {
+	switch p.focus {
+	case pageFocusInput:
+		p.FocusOutput()
+	case pageFocusOptions:
+		p.FocusInput()
+	case pageFocusOutput:
+		p.FocusOptions()
+	}
+}
+
+func (p *jsonToolPage) Run() {
+	p.runAction("json.pretty", nil)
+}
+
+func (p *jsonToolPage) ClearInput() {
+	p.pushUndo()
+	p.input.SetValue("")
+}
+
+func (p *jsonToolPage) ClearOutput() {
+	p.outputText = ""
+	p.outputErr = false
+	p.output.SetContent("")
+}
+
+func (p *jsonToolPage) SetInput(value string) {
+	p.pushUndo()
+	p.input.SetValue(value)
+}
+
+func (p *jsonToolPage) OutputText() string {
+	return strings.TrimSpace(p.outputText)
+}
+
+func (p *jsonToolPage) Status() string {
+	return p.status
+}
+
+func (p *jsonToolPage) HelpText() string {
+	return "JSON Workspace | i edit | v paste | o path | p pretty | m minify | c check | s sort | e escape | u unescape | g get | a apply | z undo"
+}
+
+func (p *jsonToolPage) actionsView() string {
+	actions := []string{
+		"[p] Pretty",
+		"[m] Minify",
+		"[c] Check",
+		"[s] Sort",
+		"[e] Escape",
+		"[u] Unescape",
+		"[g] Get Path",
+		"[a] Apply",
+		"[z] Undo",
+	}
+	return dimStyle.Render(wrapActionLine("Actions:", actions, max(18, p.width)))
+}
+
+func (p *jsonToolPage) HelpCommands() []helpCommand {
+	return []helpCommand{
+		{Key: "i/Enter", Command: "Edit JSON Input", Description: "Enter insert mode for the JSON input editor."},
+		{Key: "o", Command: "Edit Path", Description: "Edit gjson path used by Get Path."},
+		{Key: "v", Command: "Paste Input", Description: "Paste clipboard data into the input editor."},
+		{Key: "p", Command: "Pretty JSON", Description: "Format Input with two-space indentation into Output."},
+		{Key: "m", Command: "Minify JSON", Description: "Compact Input into one-line JSON in Output."},
+		{Key: "c", Command: "Check JSON", Description: "Validate Input JSON syntax."},
+		{Key: "s", Command: "Sort Keys", Description: "Recursively sort JSON object keys into Output."},
+		{Key: "e", Command: "Escape String", Description: "Encode Input as a JSON string literal."},
+		{Key: "u", Command: "Unescape String", Description: "Decode a JSON string literal from Input."},
+		{Key: "g", Command: "Get Path", Description: "Query Input with the current gjson path."},
+		{Key: "a", Command: "Apply Output", Description: "Promote Output into Input for the next action."},
+		{Key: "z", Command: "Undo Input", Description: "Restore previous Input after apply, paste, or clear."},
+	}
+}
+
+func (p *jsonToolPage) IsEditing() bool {
+	return p.editing
+}
+
+func (p *jsonToolPage) HandleKey(key string) bool {
+	switch key {
+	case "p":
+		p.runAction("json.pretty", nil)
+	case "m":
+		p.runAction("json.minify", nil)
+	case "c":
+		p.runAction("json.validate", nil)
+	case "s":
+		p.runAction("json.sort", nil)
+	case "e":
+		p.runAction("json.escape", nil)
+	case "u":
+		p.runAction("json.unescape", nil)
+	case "g", "enter":
+		path := strings.TrimSpace(p.pathBox.Value())
+		if path == "" {
+			p.FocusOptions()
+			p.status = dimStyle.Render("enter path, then press Esc and g")
+			return true
+		}
+		p.runAction("json.get", tool.Options{"path": path})
+	case "a":
+		p.applyOutput()
+	case "z":
+		p.undoInput()
+	default:
+		return false
+	}
+	return true
+}
+
+func (p *jsonToolPage) runAction(id string, options tool.Options) {
+	t, ok := p.tools[id]
+	if !ok {
+		p.outputText = "missing JSON action: " + id
+		p.outputErr = true
+		p.renderOutput()
+		p.status = errorStyle.Render(p.outputText)
+		return
+	}
+	out, err := t.Run(context.Background(), tool.Input{Text: p.input.Value()}, options)
+	p.lastAction = t.Name()
+	if err != nil {
+		p.outputText = err.Error()
+		p.outputErr = true
+		p.renderOutput()
+		p.status = errorStyle.Render("failed: " + t.Name())
+		return
+	}
+	p.outputText = out.Text
+	p.outputErr = false
+	p.renderOutput()
+	p.status = successStyle.Render("ran " + t.Name())
+}
+
+func (p *jsonToolPage) applyOutput() {
+	text := p.OutputText()
+	if text == "" {
+		p.status = dimStyle.Render("nothing to apply")
+		return
+	}
+	p.pushUndo()
+	p.input.SetValue(text)
+	p.ClearOutput()
+	p.status = successStyle.Render("applied output to input")
+}
+
+func (p *jsonToolPage) undoInput() {
+	if len(p.inputUndo) == 0 {
+		p.status = dimStyle.Render("nothing to undo")
+		return
+	}
+	last := p.inputUndo[len(p.inputUndo)-1]
+	p.inputUndo = p.inputUndo[:len(p.inputUndo)-1]
+	p.input.SetValue(last)
+	p.status = successStyle.Render("restored previous input")
+}
+
+func (p *jsonToolPage) pushUndo() {
+	current := p.input.Value()
+	if len(p.inputUndo) > 0 && p.inputUndo[len(p.inputUndo)-1] == current {
+		return
+	}
+	p.inputUndo = append(p.inputUndo, current)
+	if len(p.inputUndo) > 20 {
+		p.inputUndo = p.inputUndo[len(p.inputUndo)-20:]
+	}
+}
+
+func (p *jsonToolPage) renderOutput() {
+	wrapped := wrapDisplayText(p.outputText, max(1, p.output.Width))
+	if p.outputErr {
+		wrapped = errorStyle.Render(wrapped)
+	}
+	p.output.SetContent(wrapped)
+}
+
+func (p *jsonToolPage) stopEditing() {
+	p.editing = false
+	p.input.Blur()
+	p.pathBox.Blur()
+}
+
 func sectionLabel(title string, active bool, editing bool) string {
 	if active && editing {
 		return activeLabelStyle.Render(" " + title + " ")
@@ -1114,6 +1711,25 @@ func wrapDisplayText(s string, width int) string {
 		wrapped = append(wrapped, wrapDisplayLine(line, width)...)
 	}
 	return strings.Join(wrapped, "\n")
+}
+
+func wrapActionLine(prefix string, actions []string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	var lines []string
+	line := prefix
+	for _, action := range actions {
+		next := line + " " + action
+		if lipgloss.Width(next) > width && line != prefix {
+			lines = append(lines, line)
+			line = strings.Repeat(" ", lipgloss.Width(prefix)) + " " + action
+			continue
+		}
+		line = next
+	}
+	lines = append(lines, line)
+	return strings.Join(lines, "\n")
 }
 
 func wrapDisplayLine(line string, width int) []string {
