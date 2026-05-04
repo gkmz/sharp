@@ -2,11 +2,11 @@ package tui
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/hank/sharp/internal/tools"
 	"github.com/hank/sharp/pkg/tool"
 )
@@ -74,30 +74,6 @@ func TestGenericToolPageWrapsRenderedOutput(t *testing.T) {
 func TestWrapDisplayTextUsesTerminalWidth(t *testing.T) {
 	if got, want := wrapDisplayText("中文abcd", 4), "中文\nabcd"; got != want {
 		t.Fatalf("wrapDisplayText() = %q, want %q", got, want)
-	}
-}
-
-func TestWrapActionLineKeepsActionsVisible(t *testing.T) {
-	got := wrapActionLine("Actions:", []string{
-		"[p] Pretty",
-		"[m] Minify",
-		"[c] Check",
-		"[s] Sort",
-		"[e] Escape",
-		"[u] Unescape",
-		"[g] Get Path",
-	}, 34)
-	lines := strings.Split(got, "\n")
-	if len(lines) < 2 {
-		t.Fatalf("wrapActionLine() = %q, want multiple lines", got)
-	}
-	for _, line := range lines {
-		if width := lipgloss.Width(line); width > 34 {
-			t.Fatalf("line %q width = %d, want <= 34", line, width)
-		}
-	}
-	if !strings.Contains(got, "[g] Get Path") {
-		t.Fatalf("wrapActionLine() = %q, want later actions still visible", got)
 	}
 }
 
@@ -179,6 +155,30 @@ func TestJSONTabsRenderPagesNotAtomicTools(t *testing.T) {
 	}
 }
 
+func TestJSONTabsMoveWithHL(t *testing.T) {
+	registry := tools.NewRegistry()
+	m := newModel(registry)
+	for i, c := range m.categories {
+		if c.Category == tool.CategoryJSON {
+			m.selectedCat = i
+			break
+		}
+	}
+	m.focus = focusTabs
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	got := updated.(model)
+	if got.selectedTab != 1 {
+		t.Fatalf("selectedTab after l = %d, want 1", got.selectedTab)
+	}
+
+	updated, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	got = updated.(model)
+	if got.selectedTab != 0 {
+		t.Fatalf("selectedTab after h = %d, want 0", got.selectedTab)
+	}
+}
+
 func TestHelpOverlayShowsAndFiltersJSONCommands(t *testing.T) {
 	registry := tools.NewRegistry()
 	model := newModel(registry)
@@ -194,19 +194,56 @@ func TestHelpOverlayShowsAndFiltersJSONCommands(t *testing.T) {
 	model.resize()
 	model.openHelp()
 
-	help := model.helpView()
-	if !strings.Contains(help, "Edit Path") || !strings.Contains(help, "Apply Output") {
+	help := model.helpContent()
+	if !strings.Contains(help, "Global") || !strings.Contains(help, "Current Area") || !strings.Contains(help, "Current Tool") {
+		t.Fatalf("helpView() = %q, want grouped sections", help)
+	}
+	if !strings.Contains(help, "Edit Path") || !strings.Contains(help, "Apply Output") || !strings.Contains(help, "Get Path") {
 		t.Fatalf("helpView() = %q, want JSON command details", help)
+	}
+	if !strings.Contains(help, "Path field") || !strings.Contains(help, "query immediat") {
+		t.Fatalf("helpView() = %q, want path enter instructions", help)
 	}
 
 	model.help.SetValue("path")
-	help = model.helpView()
+	help = model.helpContent()
 	if !strings.Contains(help, "Edit Path") || strings.Contains(help, "Pretty JSON") {
 		t.Fatalf("filtered helpView() = %q, want only path-related commands", help)
 	}
 }
 
-func TestJSONActionsViewWrapsWithinPageWidth(t *testing.T) {
+func TestJSONFooterShowsCommonActions(t *testing.T) {
+	registry := tools.NewRegistry()
+	model := newModel(registry)
+	for i, c := range model.categories {
+		if c.Category == tool.CategoryJSON {
+			model.selectedCat = i
+			break
+		}
+	}
+	model.focus = focusWorkspace
+
+	footer := stripANSI(model.footerLine())
+	for _, want := range []string{"[p] pretty", "[m] minify", "[c] check", "[e] escape", "[g] get", "[?] help"} {
+		if !strings.Contains(footer, want) {
+			t.Fatalf("footerLine() = %q, want %q", footer, want)
+		}
+	}
+}
+
+func TestStatusHintHighlightsShortcutKey(t *testing.T) {
+	hint := statusHint("p", "pretty")
+	if got := stripANSI(hint); got != "[p] pretty" {
+		t.Fatalf("plain statusHint() = %q, want key and label", got)
+	}
+}
+
+func stripANSI(s string) string {
+	ansi := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	return ansi.ReplaceAllString(s, "")
+}
+
+func TestJSONPathEnterRunsQuery(t *testing.T) {
 	registry := tools.NewRegistry()
 	model := newModel(registry)
 	for i, c := range model.categories {
@@ -216,16 +253,55 @@ func TestJSONActionsViewWrapsWithinPageWidth(t *testing.T) {
 		}
 	}
 	page := model.currentPage().(*jsonToolPage)
-	page.SetSize(42, 18)
+	page.SetInput(`{"data":{"name":"sharp"}}`)
+	page.FocusOptions()
+	page.pathBox.SetValue("data.name")
 
-	actions := page.actionsView()
-	if !strings.Contains(actions, "[z] Undo") {
-		t.Fatalf("actionsView() = %q, want trailing actions visible", actions)
+	_, _ = page.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got, want := page.OutputText(), "sharp"; got != want {
+		t.Fatalf("OutputText() = %q, want %q", got, want)
 	}
-	for _, line := range strings.Split(actions, "\n") {
-		if width := lipgloss.Width(line); width > 42 {
-			t.Fatalf("actions line %q width = %d, want <= 42", line, width)
-		}
+	if page.IsEditing() {
+		t.Fatal("path enter should leave edit mode after query")
+	}
+}
+
+func TestOutputHalfPageScrollUsesFocusedOutput(t *testing.T) {
+	page := newGenericToolPage(tool.SimpleTool{
+		IDValue:          "test.long",
+		NameValue:        "Long",
+		CategoryValue:    tool.CategoryText,
+		DescriptionValue: "long output",
+		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
+			return tool.Output{Text: strings.Join([]string{
+				"line 1", "line 2", "line 3", "line 4", "line 5", "line 6", "line 7", "line 8",
+			}, "\n")}, nil
+		},
+	})
+	page.SetSize(30, 10)
+	page.Run()
+	page.FocusOutput()
+	before := page.output.YOffset
+	page.HalfPageDown()
+	if page.output.YOffset <= before {
+		t.Fatalf("output YOffset after HalfPageDown = %d, want > %d", page.output.YOffset, before)
+	}
+}
+
+func TestHelpHalfPageScroll(t *testing.T) {
+	registry := tools.NewRegistry()
+	m := newModel(registry)
+	m.width = 100
+	m.height = 14
+	m.focus = focusWorkspace
+	m.resize()
+	m.openHelp()
+
+	before := m.helpVP.YOffset
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	got := updated.(model)
+	if got.helpVP.YOffset <= before {
+		t.Fatalf("help YOffset after ctrl+d = %d, want > %d", got.helpVP.YOffset, before)
 	}
 }
 
