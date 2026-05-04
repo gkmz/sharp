@@ -812,6 +812,7 @@ type genericToolPage struct {
 	optionBox  textinput.Model
 	output     viewport.Model
 	outputText string
+	outputErr  bool
 	options    tool.Options
 	focus      pageFocus
 	editing    bool
@@ -871,6 +872,7 @@ func (p *genericToolPage) SetSize(width, height int) {
 	p.optionBox.Width = max(18, width)
 	p.output.Width = max(18, width)
 	p.output.Height = outputHeight
+	p.renderOutput()
 }
 
 func (p *genericToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
@@ -992,12 +994,14 @@ func (p *genericToolPage) Run() {
 	out, err := p.tool.Run(context.Background(), tool.Input{Text: p.input.Value()}, p.options)
 	if err != nil {
 		p.outputText = err.Error()
-		p.output.SetContent(errorStyle.Render(p.outputText))
+		p.outputErr = true
+		p.renderOutput()
 		p.status = errorStyle.Render("run failed: " + p.tool.ID())
 		return
 	}
 	p.outputText = out.Text
-	p.output.SetContent(out.Text)
+	p.outputErr = false
+	p.renderOutput()
 	p.status = successStyle.Render("ran " + p.tool.ID())
 }
 
@@ -1011,12 +1015,22 @@ func (p *genericToolPage) ClearInput() {
 
 func (p *genericToolPage) ClearOutput() {
 	p.outputText = ""
+	p.outputErr = false
 	p.output.SetContent("")
 }
 
 func (p *genericToolPage) OutputText() string {
 	// 复制、保存、pipe 都应该使用工具真实输出；viewport.View() 是屏幕渲染结果，会包含补齐空格或被滚动裁剪。
 	return strings.TrimSpace(p.outputText)
+}
+
+func (p *genericToolPage) renderOutput() {
+	// viewport 不会自动软换行；这里按当前显示宽度预处理，避免长行横向溢出导致内容不可见。
+	wrapped := wrapDisplayText(p.outputText, max(1, p.output.Width))
+	if p.outputErr {
+		wrapped = errorStyle.Render(wrapped)
+	}
+	p.output.SetContent(wrapped)
 }
 
 func (p *genericToolPage) Status() string {
@@ -1088,6 +1102,45 @@ func trimToWidth(s string, width int) string {
 		return s[:width]
 	}
 	return s[:width-3] + "..."
+}
+
+func wrapDisplayText(s string, width int) string {
+	if width <= 0 || s == "" {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	wrapped := make([]string, 0, len(lines))
+	for _, line := range lines {
+		wrapped = append(wrapped, wrapDisplayLine(line, width)...)
+	}
+	return strings.Join(wrapped, "\n")
+}
+
+func wrapDisplayLine(line string, width int) []string {
+	if line == "" {
+		return []string{""}
+	}
+	var lines []string
+	var b strings.Builder
+	currentWidth := 0
+	for _, r := range line {
+		ch := string(r)
+		chWidth := lipgloss.Width(ch)
+		if chWidth == 0 {
+			b.WriteRune(r)
+			continue
+		}
+		// 按终端显示宽度折行，兼容中文、全角标点和普通英文长串。
+		if currentWidth > 0 && currentWidth+chWidth > width {
+			lines = append(lines, b.String())
+			b.Reset()
+			currentWidth = 0
+		}
+		b.WriteRune(r)
+		currentWidth += chWidth
+	}
+	lines = append(lines, b.String())
+	return lines
 }
 
 func selectedToken(s string) string {
