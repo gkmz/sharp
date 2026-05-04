@@ -25,12 +25,19 @@ const (
 )
 
 type categoryGroup struct {
-	Category tool.Category
-	Tabs     []tabItem
+	Category    tool.Category
+	Subcategory string
+	Tabs        []tabItem
+	Header      bool
 }
 
 type tabItem struct {
 	Tool tool.Tool
+}
+
+type toolSubgroup struct {
+	Name string
+	Tabs []tabItem
 }
 
 type helpCommand struct {
@@ -53,8 +60,10 @@ type toolPage interface {
 	FocusOutput()
 	FocusNext()
 	FocusPrev()
-	HalfPageDown()
-	HalfPageUp()
+	OutputHalfPageDown()
+	OutputHalfPageUp()
+	InputHalfPageDown()
+	InputHalfPageUp()
 	Run()
 	ClearInput()
 	ClearOutput()
@@ -178,6 +187,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focus = m.searchFrom
 				m.search.Blur()
 				m.applySearch()
+				if msg.String() == "enter" && m.focusSingleSearchResult() {
+					m.focus = focusWorkspace
+				}
 				return m, nil
 			}
 			var cmd tea.Cmd
@@ -203,12 +215,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		if msg.String() == "ctrl+d" || msg.String() == "ctrl+u" {
+		if msg.String() == "ctrl+d" || msg.String() == "ctrl+u" || msg.String() == "alt+d" || msg.String() == "alt+u" {
 			if p := m.currentPage(); p != nil && m.focus == focusWorkspace {
-				if msg.String() == "ctrl+d" {
-					p.HalfPageDown()
-				} else {
-					p.HalfPageUp()
+				switch msg.String() {
+				case "ctrl+d":
+					p.OutputHalfPageDown()
+				case "ctrl+u":
+					p.OutputHalfPageUp()
+				case "alt+d":
+					p.InputHalfPageDown()
+				case "alt+u":
+					p.InputHalfPageUp()
 				}
 				m.status = p.Status()
 				return m, nil
@@ -399,8 +416,10 @@ func (m *model) resize() {
 	}
 	m.search.Width = max(10, clamp(m.width*20/100, 22, max(22, m.width-60))-4)
 	m.help.Width = max(18, min(42, m.width-10))
-	m.helpVP.Width = max(38, min(88, m.width*70/100)-2)
-	m.helpVP.Height = max(6, min(24, m.height*70/100)-5)
+	helpBoxWidth := clamp(m.width*70/100, 46, max(46, m.width-4))
+	helpBoxHeight := clamp(m.height*70/100, 10, max(10, m.height-2))
+	m.helpVP.Width = max(20, helpBoxWidth-2)
+	m.helpVP.Height = max(4, helpBoxHeight-2)
 	if m.showHelp {
 		m.refreshHelp()
 	}
@@ -413,6 +432,8 @@ func (m model) searchView(width, height int) string {
 	query := strings.TrimSpace(m.search.Value())
 	if query == "" {
 		query = "/"
+	} else {
+		query = fmt.Sprintf("/ %s", query)
 	}
 	return dimStyle.Render(query)
 }
@@ -427,7 +448,7 @@ func (m model) categoryView(width, height int) string {
 
 	for i := start; i < len(m.categories); i++ {
 		c := m.categories[i]
-		line := fmt.Sprintf("%-12s %d", c.Category, len(c.Tabs))
+		line := m.categoryLine(c)
 		if len(line) > width {
 			line = trimToWidth(line, width)
 		}
@@ -448,13 +469,23 @@ func (m model) categoryView(width, height int) string {
 	return b.String()
 }
 
+func (m model) categoryLine(c categoryGroup) string {
+	if c.Header {
+		return fmt.Sprintf("%s", c.Category)
+	}
+	if c.Subcategory != "" {
+		return fmt.Sprintf("  %-10s %d", c.Subcategory, len(c.Tabs))
+	}
+	return fmt.Sprintf("%-12s %d", c.Category, len(c.Tabs))
+}
+
 func (m model) tabsView(width, height int) string {
 	cat := m.currentCategory()
 	if cat == nil {
 		return dimStyle.Render("No category selected")
 	}
 	if cat.Category == tool.CategoryJSON {
-		return flowLabels(width, height, []string{"Workspace", "Actions", "Raw Tools"}, clamp(m.selectedTab, 0, 2))
+		return flowLabels(width, height, []string{"Workspace"}, 0)
 	}
 
 	labels := make([]string, 0, len(cat.Tabs))
@@ -508,7 +539,7 @@ func (m model) toolRows(width int) int {
 		return 1
 	}
 	if cat.Category == tool.CategoryJSON {
-		return labelRows(width, []string{"Workspace", "Actions", "Raw Tools"})
+		return labelRows(width, []string{"Workspace"})
 	}
 	labels := make([]string, 0, len(cat.Tabs))
 	for _, tab := range cat.Tabs {
@@ -656,7 +687,7 @@ func (m model) helpContent() string {
 	var b strings.Builder
 	b.WriteString(sectionLabel("Filter", true, true) + " ")
 	b.WriteString(m.help.View() + "\n")
-	b.WriteString(dimStyle.Render("Esc/? close | Ctrl+u/d scroll | Ctrl+x clear filter") + "\n")
+	b.WriteString(dimStyle.Render("Esc/? close | Ctrl+u/d scroll help | Ctrl+x clear filter") + "\n")
 	b.WriteString(sectionRuleStyle.Render(strings.Repeat("-", 64)) + "\n")
 	matched := 0
 	for _, section := range sections {
@@ -708,7 +739,9 @@ func (m model) helpSections() []helpSection {
 		context = append(context,
 			helpCommand{Key: "i/Enter", Command: "Edit Input", Description: "Enter insert mode for input."},
 			helpCommand{Key: "o", Command: "Edit Options", Description: "Edit options or JSON path."},
-			helpCommand{Key: "Tab", Command: "Next Field", Description: "Cycle input, options/path, and output. Ctrl+u/d scrolls the focused pane."},
+			helpCommand{Key: "Tab", Command: "Next Field", Description: "Cycle input, options/path, and output."},
+			helpCommand{Key: "ctrl+u/d", Command: "Scroll Output", Description: "Scroll output up or down by half a page."},
+			helpCommand{Key: "alt+u/d", Command: "Scroll Input", Description: "Scroll input up or down by half a page without changing focus."},
 			helpCommand{Key: "Shift+Tab", Command: "Previous Field", Description: "Cycle fields backward."},
 			helpCommand{Key: "v", Command: "Paste", Description: "Paste clipboard into input."},
 			helpCommand{Key: "x", Command: "Clear Input", Description: "Clear the current input."},
@@ -771,6 +804,14 @@ func (m *model) refreshHelp() {
 }
 
 func panelBox(num int, title string, active bool, content string, width, height int) string {
+	return panelBoxWithTitle(fmt.Sprintf("[%d]-%s", num, title), active, content, width, height)
+}
+
+func panelBoxTitle(title string, active bool, content string, width, height int) string {
+	return panelBoxWithTitle(title, active, content, width, height)
+}
+
+func panelBoxWithTitle(titleText string, active bool, content string, width, height int) string {
 	borderColor := lipgloss.Color("250")
 	titleStyle := panelTitleStyle
 	if active {
@@ -779,7 +820,6 @@ func panelBox(num int, title string, active bool, content string, width, height 
 	}
 	// 手写 legend 风格边框：标题嵌入上边框，内容永远被裁剪/补齐到固定宽高。
 	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
-	titleText := fmt.Sprintf("[%d]-%s", num, title)
 	titleText = truncateDisplay(titleText, max(1, width-4))
 	renderedTitle := titleStyle.Render(titleText)
 
@@ -913,7 +953,7 @@ func (m *model) moveCategory(delta int) {
 	if len(m.categories) == 0 {
 		return
 	}
-	next := clamp(m.selectedCat+delta, 0, len(m.categories)-1)
+	next := m.nextSelectableCategory(m.selectedCat, delta)
 	if next == m.selectedCat {
 		return
 	}
@@ -923,6 +963,22 @@ func (m *model) moveCategory(delta int) {
 	m.status = m.categoryStatus()
 }
 
+func (m *model) nextSelectableCategory(from int, delta int) int {
+	if delta == 0 || len(m.categories) == 0 {
+		return from
+	}
+	next := from
+	for {
+		next = clamp(next+delta, 0, len(m.categories)-1)
+		if !m.categories[next].Header {
+			return next
+		}
+		if next == 0 || next == len(m.categories)-1 {
+			return from
+		}
+	}
+}
+
 func (m *model) moveTab(delta int) {
 	cat := m.currentCategory()
 	if cat == nil || len(cat.Tabs) == 0 {
@@ -930,7 +986,7 @@ func (m *model) moveTab(delta int) {
 	}
 	maxTab := len(cat.Tabs) - 1
 	if cat.Category == tool.CategoryJSON {
-		maxTab = 2
+		maxTab = 0
 	}
 	next := clamp(m.selectedTab+delta, 0, maxTab)
 	if next == m.selectedTab {
@@ -953,8 +1009,60 @@ func (m *model) applySearch() {
 	if m.selectedCat >= len(m.categories) {
 		m.selectedCat = len(m.categories) - 1
 	}
+	m.selectedCat = m.nearestSelectableCategory(m.selectedCat)
 	m.restoreTabForSelectedCategory()
 	m.rebuildPage()
+}
+
+func (m *model) nearestSelectableCategory(idx int) int {
+	if len(m.categories) == 0 {
+		return 0
+	}
+	idx = clamp(idx, 0, len(m.categories)-1)
+	if !m.categories[idx].Header {
+		return idx
+	}
+	for i := idx + 1; i < len(m.categories); i++ {
+		if !m.categories[i].Header {
+			return i
+		}
+	}
+	for i := idx - 1; i >= 0; i-- {
+		if !m.categories[i].Header {
+			return i
+		}
+	}
+	return 0
+}
+
+func (m *model) focusSingleSearchResult() bool {
+	query := strings.TrimSpace(m.search.Value())
+	if query == "" {
+		return false
+	}
+	matches := 0
+	matchCat := 0
+	matchTab := 0
+	for ci, cat := range m.categories {
+		if cat.Header {
+			continue
+		}
+		for ti := range cat.Tabs {
+			matches++
+			matchCat = ci
+			matchTab = ti
+			if matches > 1 {
+				return false
+			}
+		}
+	}
+	if matches != 1 {
+		return false
+	}
+	m.selectedCat = matchCat
+	m.setSelectedTab(matchTab)
+	m.rebuildPage()
+	return true
 }
 
 func (m *model) syncSelection() {
@@ -966,18 +1074,19 @@ func (m *model) syncSelection() {
 	if m.selectedCat >= len(m.categories) {
 		m.selectedCat = len(m.categories) - 1
 	}
+	m.selectedCat = m.nearestSelectableCategory(m.selectedCat)
 	m.restoreTabForSelectedCategory()
 }
 
 func (m *model) restoreTabForSelectedCategory() {
 	cat := m.currentCategory()
-	if cat == nil || len(cat.Tabs) == 0 {
+	if cat == nil || cat.Header || len(cat.Tabs) == 0 {
 		m.selectedTab = 0
 		return
 	}
 	maxTab := len(cat.Tabs) - 1
 	if cat.Category == tool.CategoryJSON {
-		maxTab = 2
+		maxTab = 0
 	}
 	if idx, ok := m.lastTabByCat[cat.Category]; ok {
 		m.selectedTab = clamp(idx, 0, maxTab)
@@ -990,7 +1099,14 @@ func (m *model) restoreTabForSelectedCategory() {
 
 func (m *model) setSelectedTab(idx int) {
 	cat := m.currentCategory()
-	if cat == nil || idx < 0 || idx >= len(cat.Tabs) {
+	if cat == nil || cat.Header {
+		return
+	}
+	maxTab := len(cat.Tabs) - 1
+	if cat.Category == tool.CategoryJSON {
+		maxTab = 0
+	}
+	if idx < 0 || idx > maxTab {
 		return
 	}
 	m.selectedTab = idx
@@ -1011,7 +1127,7 @@ func (m *model) currentCategoryIsJSON() bool {
 
 func (m *model) currentTab() *tabItem {
 	cat := m.currentCategory()
-	if cat == nil || len(cat.Tabs) == 0 {
+	if cat == nil || cat.Header || len(cat.Tabs) == 0 {
 		return nil
 	}
 	if cat.Category == tool.CategoryJSON {
@@ -1152,6 +1268,9 @@ func (m *model) categoryStatus() string {
 	if cat == nil {
 		return "No category selected"
 	}
+	if cat.Subcategory != "" {
+		return fmt.Sprintf("category %s/%s | %d tools", cat.Category, cat.Subcategory, len(cat.Tabs))
+	}
 	return fmt.Sprintf("category %s | %d tools", cat.Category, len(cat.Tabs))
 }
 
@@ -1164,31 +1283,34 @@ func (m *model) tabStatus() string {
 }
 
 func buildCategories(tools []tool.Tool) []categoryGroup {
-	out := make([]categoryGroup, 0)
+	flat := make([]categoryGroup, 0)
 	if len(tools) == 0 {
-		return out
+		return flat
 	}
 
 	var current *categoryGroup
 	for _, t := range tools {
 		if current == nil || current.Category != t.Category() {
-			out = append(out, categoryGroup{Category: t.Category()})
-			current = &out[len(out)-1]
+			flat = append(flat, categoryGroup{Category: t.Category()})
+			current = &flat[len(flat)-1]
 		}
 		current.Tabs = append(current.Tabs, tabItem{Tool: t})
 	}
-	return out
+	return expandCategoryRows(flat)
 }
 
 func filterCategories(all []categoryGroup, q string) []categoryGroup {
 	if q == "" {
 		return all
 	}
-	out := make([]categoryGroup, 0, len(all))
+	byCategory := make([]categoryGroup, 0, len(all))
 	for _, c := range all {
+		if c.Header {
+			continue
+		}
 		filteredTabs := make([]tabItem, 0, len(c.Tabs))
 		for _, t := range c.Tabs {
-			haystack := strings.ToLower(t.Tool.ID() + " " + t.Tool.Name() + " " + string(t.Tool.Category()) + " " + t.Tool.Description())
+			haystack := strings.ToLower(t.Tool.ID() + " " + t.Tool.Name() + " " + string(t.Tool.Category()) + " " + toolSubcategory(t.Tool) + " " + t.Tool.Description())
 			if strings.Contains(haystack, q) {
 				filteredTabs = append(filteredTabs, t)
 			}
@@ -1196,26 +1318,83 @@ func filterCategories(all []categoryGroup, q string) []categoryGroup {
 		if len(filteredTabs) == 0 {
 			continue
 		}
-		out = append(out, categoryGroup{
+		byCategory = append(byCategory, categoryGroup{
 			Category: c.Category,
 			Tabs:     filteredTabs,
 		})
 	}
+	return expandCategoryRows(byCategory)
+}
+
+func expandCategoryRows(categories []categoryGroup) []categoryGroup {
+	out := make([]categoryGroup, 0, len(categories))
+	for _, c := range categories {
+		groups := groupedTabs(c.Tabs)
+		if len(groups) <= 1 {
+			subcategory := ""
+			if len(groups) == 1 {
+				subcategory = groups[0].Name
+			}
+			out = append(out, categoryGroup{Category: c.Category, Subcategory: subcategory, Tabs: c.Tabs})
+			continue
+		}
+		out = append(out, categoryGroup{Category: c.Category, Header: true})
+		for _, group := range groups {
+			out = append(out, categoryGroup{Category: c.Category, Subcategory: group.Name, Tabs: group.Tabs})
+		}
+	}
 	return out
 }
 
+func groupedTabs(tabs []tabItem) []toolSubgroup {
+	groups := make([]toolSubgroup, 0)
+	indexByName := make(map[string]int)
+	for _, tab := range tabs {
+		name := toolSubcategory(tab.Tool)
+		idx, ok := indexByName[name]
+		if !ok {
+			groups = append(groups, toolSubgroup{Name: name})
+			idx = len(groups) - 1
+			indexByName[name] = idx
+		}
+		groups[idx].Tabs = append(groups[idx].Tabs, tab)
+	}
+	return groups
+}
+
+func toolSubcategory(t tool.Tool) string {
+	if t == nil {
+		return "tools"
+	}
+	id := t.ID()
+	if prefix, _, ok := strings.Cut(id, "."); ok && prefix != "" {
+		return prefix
+	}
+	words := strings.Fields(t.Name())
+	if len(words) > 1 {
+		return strings.ToLower(words[0])
+	}
+	return "tools"
+}
+
 type genericToolPage struct {
-	tool       tool.Tool
-	input      textarea.Model
-	optionBox  textinput.Model
-	output     viewport.Model
-	outputText string
-	outputErr  bool
-	options    tool.Options
-	focus      pageFocus
-	editing    bool
-	status     string
-	hasOptions bool
+	tool        tool.Tool
+	input       textarea.Model
+	optionBox   textinput.Model
+	output      viewport.Model
+	outputText  string
+	outputErr   bool
+	options     tool.Options
+	inputUndo   []string
+	inputRedo   []string
+	width       int
+	inputBoxH   int
+	optionsBoxH int
+	outputBoxH  int
+	focus       pageFocus
+	editing     bool
+	status      string
+	hasOptions  bool
 }
 
 type pageFocus int
@@ -1262,14 +1441,25 @@ func newGenericToolPage(t tool.Tool) *genericToolPage {
 }
 
 func (p *genericToolPage) SetSize(width, height int) {
-	// 通用工具页先做“一个输入、一个输出”的布局：输入和输出按可用高度近似各占一半。
-	inputHeight := max(3, height/2-1)
-	outputHeight := max(3, height-inputHeight-3)
-	p.input.SetWidth(max(18, width))
-	p.input.SetHeight(inputHeight)
-	p.optionBox.Width = max(18, width)
-	p.output.Width = max(18, width)
-	p.output.Height = outputHeight
+	// 内部 Input/Options/Output 也用固定边框，组件尺寸必须按边框内侧计算。
+	p.width = max(18, width)
+	p.optionsBoxH = 0
+	if p.hasOptions {
+		p.optionsBoxH = clamp(3+len(p.tool.Options()), 4, max(4, height/4))
+	}
+	remaining := max(6, height-p.optionsBoxH)
+	p.inputBoxH = max(5, remaining/2)
+	p.outputBoxH = max(5, height-p.optionsBoxH-p.inputBoxH)
+	if p.outputBoxH < 5 {
+		p.outputBoxH = 5
+		p.inputBoxH = max(5, height-p.optionsBoxH-p.outputBoxH)
+	}
+	innerWidth := max(16, p.width-2)
+	p.input.SetWidth(innerWidth)
+	p.input.SetHeight(max(3, panelContentHeight(p.inputBoxH)))
+	p.optionBox.Width = max(16, innerWidth)
+	p.output.Width = innerWidth
+	p.output.Height = max(3, panelContentHeight(p.outputBoxH))
 	p.renderOutput()
 }
 
@@ -1291,10 +1481,20 @@ func (p *genericToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 			}
 			return p, nil
 		}
+		switch msg.String() {
+		case "ctrl+z":
+			p.undoInput()
+			return p, nil
+		case "ctrl+y":
+			p.redoInput()
+			return p, nil
+		}
 		switch p.focus {
 		case pageFocusInput:
+			before := p.input.Value()
 			var cmd tea.Cmd
 			p.input, cmd = p.input.Update(msg)
+			p.trackInputChange(before)
 			return p, cmd
 		case pageFocusOptions:
 			var cmd tea.Cmd
@@ -1306,16 +1506,15 @@ func (p *genericToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 }
 
 func (p *genericToolPage) View() string {
-	var b strings.Builder
-	b.WriteString(sectionLabel("Input", p.focus == pageFocusInput, p.editing) + "\n")
-	b.WriteString(p.input.View() + "\n")
+	blocks := make([]string, 0, 3)
+	blocks = append(blocks, panelBoxTitle("Input", p.focus == pageFocusInput, p.input.View(), p.width, p.inputBoxH))
 
 	if p.hasOptions {
+		var b strings.Builder
 		if p.focus == pageFocusOptions || p.editing {
-			b.WriteString(sectionLabel("Options", p.focus == pageFocusOptions, p.editing) + " ")
 			b.WriteString(p.optionBox.View() + "\n")
 		} else {
-			b.WriteString(dimStyle.Render("Options: "+p.optionBox.Value()) + "\n")
+			b.WriteString(dimStyle.Render(p.optionBox.Value()) + "\n")
 		}
 		for _, opt := range p.tool.Options() {
 			req := ""
@@ -1325,13 +1524,13 @@ func (p *genericToolPage) View() string {
 			line := fmt.Sprintf("--%s%s %s", opt.Name, req, opt.Description)
 			b.WriteString(dimStyle.Render(line) + "\n")
 		}
+		blocks = append(blocks, panelBoxTitle("Options", p.focus == pageFocusOptions, b.String(), p.width, p.optionsBoxH))
 	} else {
-		b.WriteString(dimStyle.Render("Options: none") + "\n")
+		// 无参数工具不再占一整块区域，把高度留给输入/输出。
 	}
 
-	b.WriteString(sectionLabel("Output", p.focus == pageFocusOutput, false) + "\n")
-	b.WriteString(p.output.View())
-	return b.String()
+	blocks = append(blocks, panelBoxTitle("Output", p.focus == pageFocusOutput, p.output.View(), p.width, p.outputBoxH))
+	return lipgloss.JoinVertical(lipgloss.Left, blocks...)
 }
 
 func (p *genericToolPage) FocusInput() {
@@ -1387,22 +1586,20 @@ func (p *genericToolPage) FocusPrev() {
 	}
 }
 
-func (p *genericToolPage) HalfPageDown() {
-	switch p.focus {
-	case pageFocusInput:
-		textareaHalfPageDown(&p.input)
-	case pageFocusOutput:
-		p.output.HalfPageDown()
-	}
+func (p *genericToolPage) OutputHalfPageDown() {
+	p.output.HalfPageDown()
 }
 
-func (p *genericToolPage) HalfPageUp() {
-	switch p.focus {
-	case pageFocusInput:
-		textareaHalfPageUp(&p.input)
-	case pageFocusOutput:
-		p.output.HalfPageUp()
-	}
+func (p *genericToolPage) OutputHalfPageUp() {
+	p.output.HalfPageUp()
+}
+
+func (p *genericToolPage) InputHalfPageDown() {
+	textareaHalfPageDown(&p.input)
+}
+
+func (p *genericToolPage) InputHalfPageUp() {
+	textareaHalfPageUp(&p.input)
 }
 
 func (p *genericToolPage) Run() {
@@ -1422,11 +1619,15 @@ func (p *genericToolPage) Run() {
 }
 
 func (p *genericToolPage) SetInput(value string) {
+	p.pushInputUndo()
 	p.input.SetValue(value)
+	p.inputRedo = nil
 }
 
 func (p *genericToolPage) ClearInput() {
+	p.pushInputUndo()
 	p.input.SetValue("")
+	p.inputRedo = nil
 }
 
 func (p *genericToolPage) ClearOutput() {
@@ -1477,6 +1678,55 @@ func (p *genericToolPage) IsEditing() bool {
 	return p.editing
 }
 
+func (p *genericToolPage) trackInputChange(before string) {
+	after := p.input.Value()
+	if after == before {
+		return
+	}
+	p.pushInputUndoValue(before)
+	p.inputRedo = nil
+}
+
+func (p *genericToolPage) pushInputUndo() {
+	p.pushInputUndoValue(p.input.Value())
+}
+
+func (p *genericToolPage) pushInputUndoValue(value string) {
+	if len(p.inputUndo) > 0 && p.inputUndo[len(p.inputUndo)-1] == value {
+		return
+	}
+	p.inputUndo = append(p.inputUndo, value)
+	if len(p.inputUndo) > 100 {
+		p.inputUndo = p.inputUndo[len(p.inputUndo)-100:]
+	}
+}
+
+func (p *genericToolPage) undoInput() {
+	if len(p.inputUndo) == 0 {
+		p.status = dimStyle.Render("nothing to undo")
+		return
+	}
+	current := p.input.Value()
+	last := p.inputUndo[len(p.inputUndo)-1]
+	p.inputUndo = p.inputUndo[:len(p.inputUndo)-1]
+	p.inputRedo = append(p.inputRedo, current)
+	p.input.SetValue(last)
+	p.status = successStyle.Render("undo input")
+}
+
+func (p *genericToolPage) redoInput() {
+	if len(p.inputRedo) == 0 {
+		p.status = dimStyle.Render("nothing to redo")
+		return
+	}
+	current := p.input.Value()
+	next := p.inputRedo[len(p.inputRedo)-1]
+	p.inputRedo = p.inputRedo[:len(p.inputRedo)-1]
+	p.pushInputUndoValue(current)
+	p.input.SetValue(next)
+	p.status = successStyle.Render("redo input")
+}
+
 func (p *genericToolPage) HandleKey(key string) bool {
 	return false
 }
@@ -1523,9 +1773,13 @@ type jsonToolPage struct {
 	output     viewport.Model
 	tools      map[string]tool.Tool
 	width      int
+	inputBoxH  int
+	pathBoxH   int
+	outputBoxH int
 	focus      pageFocus
 	editing    bool
 	inputUndo  []string
+	inputRedo  []string
 	outputText string
 	outputErr  bool
 	status     string
@@ -1557,15 +1811,22 @@ func newJSONToolPage(t tool.Tool, tools map[string]tool.Tool) *jsonToolPage {
 }
 
 func (p *jsonToolPage) SetSize(width, height int) {
-	// JSON 工作台同样保持输入/输出上下分布，Path 行和 Actions 行固定占用少量高度。
+	// JSON 工作台固定保留一行 Path，其余高度在 Input/Output 之间分配。
 	p.width = max(18, width)
-	inputHeight := max(3, height/2-2)
-	outputHeight := max(3, height-inputHeight-5)
-	p.input.SetWidth(max(18, width))
-	p.input.SetHeight(inputHeight)
-	p.pathBox.Width = max(18, width-10)
-	p.output.Width = max(18, width)
-	p.output.Height = outputHeight
+	p.pathBoxH = 3
+	remaining := max(6, height-p.pathBoxH)
+	p.inputBoxH = max(5, remaining/2)
+	p.outputBoxH = max(5, height-p.pathBoxH-p.inputBoxH)
+	if p.outputBoxH < 5 {
+		p.outputBoxH = 5
+		p.inputBoxH = max(5, height-p.pathBoxH-p.outputBoxH)
+	}
+	innerWidth := max(16, p.width-2)
+	p.input.SetWidth(innerWidth)
+	p.input.SetHeight(max(3, panelContentHeight(p.inputBoxH)))
+	p.pathBox.Width = innerWidth
+	p.output.Width = innerWidth
+	p.output.Height = max(3, panelContentHeight(p.outputBoxH))
 	p.renderOutput()
 }
 
@@ -1587,10 +1848,20 @@ func (p *jsonToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 			}
 			return p, nil
 		}
+		switch msg.String() {
+		case "ctrl+z":
+			p.undoInput()
+			return p, nil
+		case "ctrl+y":
+			p.redoInput()
+			return p, nil
+		}
 		switch p.focus {
 		case pageFocusInput:
+			before := p.input.Value()
 			var cmd tea.Cmd
 			p.input, cmd = p.input.Update(msg)
+			p.trackInputChange(before)
 			return p, cmd
 		case pageFocusOptions:
 			if msg.String() == "enter" {
@@ -1607,25 +1878,25 @@ func (p *jsonToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 }
 
 func (p *jsonToolPage) View() string {
-	var b strings.Builder
-	b.WriteString(sectionLabel("Input", p.focus == pageFocusInput, p.editing) + "\n")
-	b.WriteString(p.input.View() + "\n")
-	b.WriteString(sectionLabel("Path", p.focus == pageFocusOptions, p.editing) + " ")
+	inputBlock := panelBoxTitle("Input", p.focus == pageFocusInput, p.input.View(), p.width, p.inputBoxH)
+	var path strings.Builder
 	if p.focus == pageFocusOptions || p.editing {
-		b.WriteString(p.pathBox.View() + "\n")
+		path.WriteString(p.pathBox.View())
 	} else {
 		value := p.pathBox.Value()
 		if value == "" {
 			value = "gjson path"
 		}
-		b.WriteString(dimStyle.Render(value) + "\n")
+		path.WriteString(dimStyle.Render(value))
 	}
+	pathBlock := panelBoxTitle("Path", p.focus == pageFocusOptions, path.String(), p.width, p.pathBoxH)
+	var output strings.Builder
 	if p.lastAction != "" {
-		b.WriteString(dimStyle.Render("Last: "+p.lastAction+" | actions read Input; [a] promotes Output to Input") + "\n")
+		output.WriteString(dimStyle.Render("Last: "+p.lastAction+" | actions read Input; [a] promotes Output to Input") + "\n")
 	}
-	b.WriteString(sectionLabel("Output", p.focus == pageFocusOutput, false) + "\n")
-	b.WriteString(p.output.View())
-	return b.String()
+	output.WriteString(p.output.View())
+	outputBlock := panelBoxTitle("Output", p.focus == pageFocusOutput, output.String(), p.width, p.outputBoxH)
+	return lipgloss.JoinVertical(lipgloss.Left, inputBlock, pathBlock, outputBlock)
 }
 
 func (p *jsonToolPage) FocusInput() {
@@ -1669,22 +1940,20 @@ func (p *jsonToolPage) FocusPrev() {
 	}
 }
 
-func (p *jsonToolPage) HalfPageDown() {
-	switch p.focus {
-	case pageFocusInput:
-		textareaHalfPageDown(&p.input)
-	case pageFocusOutput:
-		p.output.HalfPageDown()
-	}
+func (p *jsonToolPage) OutputHalfPageDown() {
+	p.output.HalfPageDown()
 }
 
-func (p *jsonToolPage) HalfPageUp() {
-	switch p.focus {
-	case pageFocusInput:
-		textareaHalfPageUp(&p.input)
-	case pageFocusOutput:
-		p.output.HalfPageUp()
-	}
+func (p *jsonToolPage) OutputHalfPageUp() {
+	p.output.HalfPageUp()
+}
+
+func (p *jsonToolPage) InputHalfPageDown() {
+	textareaHalfPageDown(&p.input)
+}
+
+func (p *jsonToolPage) InputHalfPageUp() {
+	textareaHalfPageUp(&p.input)
 }
 
 func (p *jsonToolPage) Run() {
@@ -1692,8 +1961,9 @@ func (p *jsonToolPage) Run() {
 }
 
 func (p *jsonToolPage) ClearInput() {
-	p.pushUndo()
+	p.pushInputUndo()
 	p.input.SetValue("")
+	p.inputRedo = nil
 }
 
 func (p *jsonToolPage) ClearOutput() {
@@ -1703,8 +1973,9 @@ func (p *jsonToolPage) ClearOutput() {
 }
 
 func (p *jsonToolPage) SetInput(value string) {
-	p.pushUndo()
+	p.pushInputUndo()
 	p.input.SetValue(value)
+	p.inputRedo = nil
 }
 
 func (p *jsonToolPage) OutputText() string {
@@ -1736,7 +2007,8 @@ func (p *jsonToolPage) FooterHints() string {
 		statusHint("e", "escape"),
 		statusHint("g", "get"),
 		statusHint("a", "apply"),
-		statusHint("ctrl+u/d", "scroll"),
+		statusHint("ctrl+u/d", "output"),
+		statusHint("alt+u/d", "input"),
 		statusHint("?", "help"),
 	)
 }
@@ -1746,6 +2018,8 @@ func (p *jsonToolPage) HelpCommands() []helpCommand {
 		{Key: "i/Enter", Command: "Edit JSON Input", Description: "Enter insert mode for the JSON input editor."},
 		{Key: "o", Command: "Edit Path", Description: "Edit gjson path; press Enter in the Path field to query immediately."},
 		{Key: "v", Command: "Paste Input", Description: "Paste clipboard data into the input editor."},
+		{Key: "ctrl+z", Command: "Undo Input", Description: "Undo the last input edit while editing the input field."},
+		{Key: "ctrl+y", Command: "Redo Input", Description: "Redo the last undone input edit while editing the input field."},
 		{Key: "p", Command: "Pretty JSON", Description: "Format Input with two-space indentation into Output."},
 		{Key: "m", Command: "Minify JSON", Description: "Compact Input into one-line JSON in Output."},
 		{Key: "c", Command: "Check JSON", Description: "Validate Input JSON syntax."},
@@ -1828,8 +2102,9 @@ func (p *jsonToolPage) applyOutput() {
 		p.status = dimStyle.Render("nothing to apply")
 		return
 	}
-	p.pushUndo()
+	p.pushInputUndo()
 	p.input.SetValue(text)
+	p.inputRedo = nil
 	p.ClearOutput()
 	p.status = successStyle.Render("applied output to input")
 }
@@ -1839,20 +2114,47 @@ func (p *jsonToolPage) undoInput() {
 		p.status = dimStyle.Render("nothing to undo")
 		return
 	}
+	current := p.input.Value()
 	last := p.inputUndo[len(p.inputUndo)-1]
 	p.inputUndo = p.inputUndo[:len(p.inputUndo)-1]
+	p.inputRedo = append(p.inputRedo, current)
 	p.input.SetValue(last)
-	p.status = successStyle.Render("restored previous input")
+	p.status = successStyle.Render("undo input")
 }
 
-func (p *jsonToolPage) pushUndo() {
-	current := p.input.Value()
-	if len(p.inputUndo) > 0 && p.inputUndo[len(p.inputUndo)-1] == current {
+func (p *jsonToolPage) redoInput() {
+	if len(p.inputRedo) == 0 {
+		p.status = dimStyle.Render("nothing to redo")
 		return
 	}
-	p.inputUndo = append(p.inputUndo, current)
-	if len(p.inputUndo) > 20 {
-		p.inputUndo = p.inputUndo[len(p.inputUndo)-20:]
+	current := p.input.Value()
+	next := p.inputRedo[len(p.inputRedo)-1]
+	p.inputRedo = p.inputRedo[:len(p.inputRedo)-1]
+	p.pushInputUndoValue(current)
+	p.input.SetValue(next)
+	p.status = successStyle.Render("redo input")
+}
+
+func (p *jsonToolPage) trackInputChange(before string) {
+	after := p.input.Value()
+	if after == before {
+		return
+	}
+	p.pushInputUndoValue(before)
+	p.inputRedo = nil
+}
+
+func (p *jsonToolPage) pushInputUndo() {
+	p.pushInputUndoValue(p.input.Value())
+}
+
+func (p *jsonToolPage) pushInputUndoValue(value string) {
+	if len(p.inputUndo) > 0 && p.inputUndo[len(p.inputUndo)-1] == value {
+		return
+	}
+	p.inputUndo = append(p.inputUndo, value)
+	if len(p.inputUndo) > 100 {
+		p.inputUndo = p.inputUndo[len(p.inputUndo)-100:]
 	}
 }
 
