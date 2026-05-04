@@ -468,7 +468,7 @@ func (m model) footerLine() string {
 }
 
 func panelBox(num int, title string, active bool, content string, width, height int) string {
-	borderColor := lipgloss.Color("238")
+	borderColor := lipgloss.Color("250")
 	titleStyle := panelTitleStyle
 	if active {
 		borderColor = lipgloss.Color("39")
@@ -690,7 +690,12 @@ func (m *model) copyOutput() {
 	if p == nil {
 		return
 	}
-	if err := clipboard.Write(p.OutputText()); err != nil {
+	text := p.OutputText()
+	if text == "" {
+		m.status = dimStyle.Render("nothing to copy")
+		return
+	}
+	if err := clipboard.Write(text); err != nil {
 		m.status = errorStyle.Render("copy failed: " + err.Error())
 		return
 	}
@@ -702,7 +707,12 @@ func (m *model) saveOutput() {
 	if p == nil {
 		return
 	}
-	if err := os.WriteFile("sharp-output.txt", []byte(p.OutputText()), 0600); err != nil {
+	text := p.OutputText()
+	if text == "" {
+		m.status = dimStyle.Render("nothing to save")
+		return
+	}
+	if err := os.WriteFile("sharp-output.txt", []byte(text), 0600); err != nil {
 		m.status = errorStyle.Render("save failed: " + err.Error())
 		return
 	}
@@ -714,7 +724,12 @@ func (m *model) pipeOutput() {
 	if p == nil {
 		return
 	}
-	p.SetInput(p.OutputText())
+	text := p.OutputText()
+	if text == "" {
+		m.status = dimStyle.Render("nothing to pipe")
+		return
+	}
+	p.SetInput(text)
 	m.focus = focusWorkspace
 	p.FocusInput()
 	m.status = successStyle.Render("output moved to input")
@@ -796,6 +811,7 @@ type genericToolPage struct {
 	input      textarea.Model
 	optionBox  textinput.Model
 	output     viewport.Model
+	outputText string
 	options    tool.Options
 	focus      pageFocus
 	editing    bool
@@ -975,10 +991,12 @@ func (p *genericToolPage) Run() {
 	p.parseOptions()
 	out, err := p.tool.Run(context.Background(), tool.Input{Text: p.input.Value()}, p.options)
 	if err != nil {
-		p.output.SetContent(errorStyle.Render(err.Error()))
+		p.outputText = err.Error()
+		p.output.SetContent(errorStyle.Render(p.outputText))
 		p.status = errorStyle.Render("run failed: " + p.tool.ID())
 		return
 	}
+	p.outputText = out.Text
 	p.output.SetContent(out.Text)
 	p.status = successStyle.Render("ran " + p.tool.ID())
 }
@@ -992,11 +1010,13 @@ func (p *genericToolPage) ClearInput() {
 }
 
 func (p *genericToolPage) ClearOutput() {
+	p.outputText = ""
 	p.output.SetContent("")
 }
 
 func (p *genericToolPage) OutputText() string {
-	return p.output.View()
+	// 复制、保存、pipe 都应该使用工具真实输出；viewport.View() 是屏幕渲染结果，会包含补齐空格或被滚动裁剪。
+	return strings.TrimSpace(p.outputText)
 }
 
 func (p *genericToolPage) Status() string {
