@@ -1,4 +1,4 @@
-module github.com/hank/sharp
+module github.com/gkmz/sharp
 
 go 1.25.1
 

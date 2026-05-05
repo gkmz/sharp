@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/hank/sharp/internal/tools"
-	"github.com/hank/sharp/pkg/tool"
+	"github.com/gkmz/sharp/internal/tools"
+	"github.com/gkmz/sharp/pkg/tool"
 )
 
 func TestGenericToolPageOutputTextUsesTrimmedRawOutput(t *testing.T) {

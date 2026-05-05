@@ -8,9 +8,10 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
-	"github.com/hank/sharp/pkg/tool"
 	"hash"
 	"hash/crc32"
+
+	"github.com/gkmz/sharp/pkg/tool"
 )
 
 func Register(r *tool.Registry) {

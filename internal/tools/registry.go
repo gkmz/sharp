@@ -1,16 +1,16 @@
 package tools
 
 import (
-	"github.com/hank/sharp/internal/tools/convert"
-	"github.com/hank/sharp/internal/tools/encode"
-	"github.com/hank/sharp/internal/tools/generator"
-	"github.com/hank/sharp/internal/tools/hash"
-	jsontools "github.com/hank/sharp/internal/tools/json"
-	"github.com/hank/sharp/internal/tools/jwt"
-	"github.com/hank/sharp/internal/tools/network"
-	"github.com/hank/sharp/internal/tools/text"
-	"github.com/hank/sharp/internal/tools/timeutil"
-	"github.com/hank/sharp/pkg/tool"
+	"github.com/gkmz/sharp/internal/tools/convert"
+	"github.com/gkmz/sharp/internal/tools/encode"
+	"github.com/gkmz/sharp/internal/tools/generator"
+	"github.com/gkmz/sharp/internal/tools/hash"
+	jsontools "github.com/gkmz/sharp/internal/tools/json"
+	"github.com/gkmz/sharp/internal/tools/jwt"
+	"github.com/gkmz/sharp/internal/tools/network"
+	"github.com/gkmz/sharp/internal/tools/text"
+	"github.com/gkmz/sharp/internal/tools/timeutil"
+	"github.com/gkmz/sharp/pkg/tool"
 )
 
 func NewRegistry() *tool.Registry {

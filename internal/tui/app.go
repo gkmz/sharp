@@ -11,8 +11,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/hank/sharp/internal/clipboard"
-	"github.com/hank/sharp/pkg/tool"
+	"github.com/gkmz/sharp/internal/clipboard"
+	"github.com/gkmz/sharp/pkg/tool"
 )
 
 type focus int

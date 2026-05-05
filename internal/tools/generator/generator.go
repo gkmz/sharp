@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/gkmz/sharp/pkg/tool"
 	"github.com/google/uuid"
-	"github.com/hank/sharp/pkg/tool"
 )
 
 const passwordChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}:,.?"

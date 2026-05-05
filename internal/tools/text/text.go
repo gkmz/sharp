@@ -3,12 +3,13 @@ package text
 import (
 	"context"
 	"fmt"
-	"github.com/hank/sharp/pkg/tool"
 	"regexp"
 	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/gkmz/sharp/pkg/tool"
 )
 
 func Register(r *tool.Registry) {

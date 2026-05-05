@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hank/sharp/internal/tools"
-	"github.com/hank/sharp/internal/tui"
-	"github.com/hank/sharp/pkg/tool"
+	"github.com/gkmz/sharp/internal/tools"
+	"github.com/gkmz/sharp/internal/tui"
+	"github.com/gkmz/sharp/pkg/tool"
 	"github.com/spf13/cobra"
 )
 

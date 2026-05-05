@@ -3,10 +3,11 @@ package timeutil
 import (
 	"context"
 	"fmt"
-	"github.com/hank/sharp/pkg/tool"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gkmz/sharp/pkg/tool"
 )
 
 func Register(r *tool.Registry) {
