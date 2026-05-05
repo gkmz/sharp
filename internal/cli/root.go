@@ -14,13 +14,30 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version is the semantic version printed by `sharp version`.
+// Release builds can override it with -ldflags "-X github.com/gkmz/sharp/internal/cli.Version=X.Y.Z".
+var Version = "0.0.0"
+
+const logo = `   _____ __  _____    ____  ____
+  / ___// / / /   |  / __ \/ __ \
+  \__ \/ /_/ / /| | / /_/ / /_/ /
+ ___/ / __  / ___ |/ _, _/ ____/
+/____/_/ /_/_/  |_/_/ |_/_/
+        local dev toolkit`
+
 // Execute builds and runs the root CLI command.
 func Execute() error {
 	registry := tools.NewRegistry()
+	root := NewRootCommand(registry)
+	return root.Execute()
+}
+
+// NewRootCommand builds the root command around registry.
+func NewRootCommand(registry *tool.Registry) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "sharp",
 		Short: "Interactive terminal toolkit for developers",
-		Long:  "sharp is a keyboard-first developer toolkit for JSON, encoding, crypto, time, text, network, and generators.",
+		Long:  logo + "\n\nsharp is a keyboard-first developer toolkit for JSON, encoding, crypto, time, text, network, conversion, JWT inspection, and generators.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return tui.Run(registry)
@@ -29,8 +46,9 @@ func Execute() error {
 		},
 	}
 	root.AddCommand(listCommand(registry))
+	root.AddCommand(versionCommand())
 	addToolCommands(root, registry)
-	return root.Execute()
+	return root
 }
 
 func listCommand(registry *tool.Registry) *cobra.Command {
@@ -41,6 +59,17 @@ func listCommand(registry *tool.Registry) *cobra.Command {
 			for _, t := range registry.All() {
 				fmt.Fprintf(cmd.OutOrStdout(), "%-18s %-12s %s\n", t.ID(), t.Category(), t.Description())
 			}
+		},
+	}
+}
+
+func versionCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print version information",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Fprintln(cmd.OutOrStdout(), logo)
+			fmt.Fprintf(cmd.OutOrStdout(), "\nversion: %s\n", Version)
 		},
 	}
 }
