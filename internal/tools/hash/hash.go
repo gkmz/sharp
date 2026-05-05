@@ -14,6 +14,7 @@ import (
 	"github.com/gkmz/sharp/pkg/tool"
 )
 
+// Register adds hash and HMAC tools to r.
 func Register(r *tool.Registry) {
 	digest(r, "hash.md5", "MD5", md5.New)
 	digest(r, "hash.sha1", "SHA1", sha1.New)

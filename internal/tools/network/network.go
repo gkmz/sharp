@@ -12,6 +12,7 @@ import (
 	"github.com/gkmz/sharp/pkg/tool"
 )
 
+// Register adds URL, query string, DNS, and CIDR tools to r.
 func Register(r *tool.Registry) {
 	r.MustRegister(tool.SimpleTool{
 		IDValue:          "url.parse",

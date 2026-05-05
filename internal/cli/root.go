@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Execute builds and runs the root CLI command.
 func Execute() error {
 	registry := tools.NewRegistry()
 	root := &cobra.Command{

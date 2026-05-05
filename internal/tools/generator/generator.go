@@ -13,6 +13,7 @@ import (
 
 const passwordChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+[]{}:,.?"
 
+// Register adds random value generator tools to r.
 func Register(r *tool.Registry) {
 	r.MustRegister(tool.SimpleTool{
 		IDValue:          "uuid.v4",

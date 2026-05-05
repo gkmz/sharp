@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Register adds format conversion tools to r.
 func Register(r *tool.Registry) {
 	r.MustRegister(tool.SimpleTool{
 		IDValue:          "json.to_yaml",

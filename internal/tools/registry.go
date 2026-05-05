@@ -13,6 +13,7 @@ import (
 	"github.com/gkmz/sharp/pkg/tool"
 )
 
+// NewRegistry returns the default registry with every built-in sharp tool.
 func NewRegistry() *tool.Registry {
 	r := tool.NewRegistry()
 	jsontools.Register(r)

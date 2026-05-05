@@ -12,6 +12,7 @@ import (
 	"github.com/gkmz/sharp/pkg/tool"
 )
 
+// Register adds text transformation, counting, sorting, and regex tools to r.
 func Register(r *tool.Registry) {
 	textTool(r, "text.upper", "Uppercase", "Convert text to uppercase.", strings.ToUpper)
 	textTool(r, "text.lower", "Lowercase", "Convert text to lowercase.", strings.ToLower)

@@ -12,6 +12,7 @@ import (
 	"github.com/gkmz/sharp/pkg/tool"
 )
 
+// Register adds encoding and decoding tools to r.
 func Register(r *tool.Registry) {
 	base64Tool(r, "b64.encode", "Base64 Encode", base64.StdEncoding.EncodeToString)
 	base64DecodeTool(r, "b64.decode", "Base64 Decode", base64.StdEncoding.DecodeString)

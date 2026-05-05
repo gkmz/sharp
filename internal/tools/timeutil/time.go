@@ -10,6 +10,7 @@ import (
 	"github.com/gkmz/sharp/pkg/tool"
 )
 
+// Register adds time formatting and timestamp conversion tools to r.
 func Register(r *tool.Registry) {
 	r.MustRegister(tool.SimpleTool{
 		IDValue:          "time.now",

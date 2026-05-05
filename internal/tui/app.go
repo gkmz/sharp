@@ -115,6 +115,7 @@ var (
 	statusTextStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
 )
 
+// Run starts the interactive Bubble Tea application for registry.
 func Run(registry *tool.Registry) error {
 	p := tea.NewProgram(newModel(registry), tea.WithAltScreen())
 	_, err := p.Run()
@@ -1448,6 +1449,7 @@ func newGenericToolPage(t tool.Tool) *genericToolPage {
 	return p
 }
 
+// SetSize recalculates the generic page layout and child component sizes.
 func (p *genericToolPage) SetSize(width, height int) {
 	// 内部各块都用固定边框，组件尺寸必须按边框内侧计算。
 	p.width = max(18, width)
@@ -1479,6 +1481,7 @@ func (p *genericToolPage) SetSize(width, height int) {
 	p.renderOutput()
 }
 
+// Update forwards key events to the focused editor while preserving normal mode.
 func (p *genericToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -1521,6 +1524,7 @@ func (p *genericToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 	return p, nil
 }
 
+// View renders the generic Input/Options/Actions/Output workspace.
 func (p *genericToolPage) View() string {
 	blocks := make([]string, 0, 4)
 	if p.hasInput {
@@ -1561,6 +1565,7 @@ func (p *genericToolPage) actionsView() string {
 	return strings.Join(hints, "  ")
 }
 
+// FocusInput enters insert mode for the input editor when this tool accepts input.
 func (p *genericToolPage) FocusInput() {
 	if !p.hasInput {
 		if p.hasOptions {
@@ -1576,6 +1581,7 @@ func (p *genericToolPage) FocusInput() {
 	p.input.Focus()
 }
 
+// FocusOptions enters insert mode for option editing when options are available.
 func (p *genericToolPage) FocusOptions() {
 	if !p.hasOptions {
 		p.FocusInput()
@@ -1587,11 +1593,13 @@ func (p *genericToolPage) FocusOptions() {
 	p.optionBox.Focus()
 }
 
+// FocusOutput leaves insert mode and targets output scrolling.
 func (p *genericToolPage) FocusOutput() {
 	p.focus = pageFocusOutput
 	p.stopEditing()
 }
 
+// FocusNext cycles forward through visible editable panes.
 func (p *genericToolPage) FocusNext() {
 	switch p.focus {
 	case pageFocusInput:
@@ -1611,6 +1619,7 @@ func (p *genericToolPage) FocusNext() {
 	}
 }
 
+// FocusPrev cycles backward through visible editable panes.
 func (p *genericToolPage) FocusPrev() {
 	switch p.focus {
 	case pageFocusInput:
@@ -1630,14 +1639,17 @@ func (p *genericToolPage) FocusPrev() {
 	}
 }
 
+// OutputHalfPageDown scrolls output down by half a page.
 func (p *genericToolPage) OutputHalfPageDown() {
 	p.output.HalfPageDown()
 }
 
+// OutputHalfPageUp scrolls output up by half a page.
 func (p *genericToolPage) OutputHalfPageUp() {
 	p.output.HalfPageUp()
 }
 
+// InputHalfPageDown scrolls input down by half a page when input is visible.
 func (p *genericToolPage) InputHalfPageDown() {
 	if !p.hasInput {
 		return
@@ -1645,6 +1657,7 @@ func (p *genericToolPage) InputHalfPageDown() {
 	textareaHalfPageDown(&p.input)
 }
 
+// InputHalfPageUp scrolls input up by half a page when input is visible.
 func (p *genericToolPage) InputHalfPageUp() {
 	if !p.hasInput {
 		return
@@ -1652,6 +1665,7 @@ func (p *genericToolPage) InputHalfPageUp() {
 	textareaHalfPageUp(&p.input)
 }
 
+// Run executes the selected tool with current input and parsed options.
 func (p *genericToolPage) Run() {
 	p.parseOptions()
 	out, err := p.tool.Run(context.Background(), tool.Input{Text: p.input.Value()}, p.options)
@@ -1668,6 +1682,7 @@ func (p *genericToolPage) Run() {
 	p.status = successStyle.Render("ran " + p.tool.ID())
 }
 
+// SetInput replaces input text and records undo history.
 func (p *genericToolPage) SetInput(value string) {
 	if !p.hasInput {
 		p.status = dimStyle.Render("this tool has no input")
@@ -1678,6 +1693,7 @@ func (p *genericToolPage) SetInput(value string) {
 	p.inputRedo = nil
 }
 
+// ClearInput clears input text and records undo history.
 func (p *genericToolPage) ClearInput() {
 	if !p.hasInput {
 		p.status = dimStyle.Render("this tool has no input")
@@ -1688,12 +1704,14 @@ func (p *genericToolPage) ClearInput() {
 	p.inputRedo = nil
 }
 
+// ClearOutput clears raw and rendered output.
 func (p *genericToolPage) ClearOutput() {
 	p.outputText = ""
 	p.outputErr = false
 	p.output.SetContent("")
 }
 
+// OutputText returns trimmed raw output for copy, save, and pipe operations.
 func (p *genericToolPage) OutputText() string {
 	// 复制、保存、pipe 都应该使用工具真实输出；viewport.View() 是屏幕渲染结果，会包含补齐空格或被滚动裁剪。
 	return strings.TrimSpace(p.outputText)
@@ -1708,14 +1726,17 @@ func (p *genericToolPage) renderOutput() {
 	p.output.SetContent(wrapped)
 }
 
+// Status returns the latest user-facing page status.
 func (p *genericToolPage) Status() string {
 	return p.status
 }
 
+// HelpText returns a compact help summary for legacy callers.
 func (p *genericToolPage) HelpText() string {
 	return fmt.Sprintf("%s | Esc back/exit edit | Tab field | r run | y copy | s save | p pipe", p.tool.Name())
 }
 
+// HelpCommands returns structured commands for the popup help overlay.
 func (p *genericToolPage) HelpCommands() []helpCommand {
 	commands := []helpCommand{
 		{Key: "r", Command: "Run Tool", Description: "Run " + p.tool.Name() + " with current input and options."},
@@ -1736,6 +1757,7 @@ func (p *genericToolPage) HelpCommands() []helpCommand {
 	return commands
 }
 
+// FooterHints returns status bar shortcuts customized to the current tool shape.
 func (p *genericToolPage) FooterHints() string {
 	if !p.hasInput {
 		return statusLine(p.tool.Name(),
@@ -1750,6 +1772,7 @@ func (p *genericToolPage) FooterHints() string {
 	return ""
 }
 
+// IsEditing reports whether key events should be routed to a text editor.
 func (p *genericToolPage) IsEditing() bool {
 	return p.editing
 }
@@ -1806,6 +1829,7 @@ func (p *genericToolPage) redoInput() {
 	p.status = successStyle.Render("redo input")
 }
 
+// HandleKey handles page-specific normal-mode shortcuts.
 func (p *genericToolPage) HandleKey(key string) bool {
 	return false
 }
@@ -1898,6 +1922,7 @@ func newJSONToolPage(t tool.Tool, tools map[string]tool.Tool) *jsonToolPage {
 	return p
 }
 
+// SetSize recalculates the JSON workbench layout and child component sizes.
 func (p *jsonToolPage) SetSize(width, height int) {
 	// JSON 工作台固定保留一行 Path，其余高度在 Input/Output 之间分配。
 	p.width = max(18, width)
@@ -1918,6 +1943,7 @@ func (p *jsonToolPage) SetSize(width, height int) {
 	p.renderOutput()
 }
 
+// Update forwards key events to the active JSON workbench editor.
 func (p *jsonToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -1965,6 +1991,7 @@ func (p *jsonToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 	return p, nil
 }
 
+// View renders the JSON workbench with input, path, and output panes.
 func (p *jsonToolPage) View() string {
 	inputBlock := panelBoxTitle("Input", p.focus == pageFocusInput, p.input.View(), p.width, p.inputBoxH)
 	var path strings.Builder
@@ -1987,6 +2014,7 @@ func (p *jsonToolPage) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, inputBlock, pathBlock, outputBlock)
 }
 
+// FocusInput enters insert mode for the JSON input editor.
 func (p *jsonToolPage) FocusInput() {
 	p.focus = pageFocusInput
 	p.editing = true
@@ -1994,6 +2022,7 @@ func (p *jsonToolPage) FocusInput() {
 	p.input.Focus()
 }
 
+// FocusOptions enters insert mode for the JSON path editor.
 func (p *jsonToolPage) FocusOptions() {
 	p.focus = pageFocusOptions
 	p.editing = true
@@ -2001,11 +2030,13 @@ func (p *jsonToolPage) FocusOptions() {
 	p.pathBox.Focus()
 }
 
+// FocusOutput leaves insert mode and targets output scrolling.
 func (p *jsonToolPage) FocusOutput() {
 	p.focus = pageFocusOutput
 	p.stopEditing()
 }
 
+// FocusNext cycles forward through JSON input, path, and output panes.
 func (p *jsonToolPage) FocusNext() {
 	switch p.focus {
 	case pageFocusInput:
@@ -2017,6 +2048,7 @@ func (p *jsonToolPage) FocusNext() {
 	}
 }
 
+// FocusPrev cycles backward through JSON input, path, and output panes.
 func (p *jsonToolPage) FocusPrev() {
 	switch p.focus {
 	case pageFocusInput:
@@ -2028,56 +2060,68 @@ func (p *jsonToolPage) FocusPrev() {
 	}
 }
 
+// OutputHalfPageDown scrolls output down by half a page.
 func (p *jsonToolPage) OutputHalfPageDown() {
 	p.output.HalfPageDown()
 }
 
+// OutputHalfPageUp scrolls output up by half a page.
 func (p *jsonToolPage) OutputHalfPageUp() {
 	p.output.HalfPageUp()
 }
 
+// InputHalfPageDown scrolls JSON input down by half a page.
 func (p *jsonToolPage) InputHalfPageDown() {
 	textareaHalfPageDown(&p.input)
 }
 
+// InputHalfPageUp scrolls JSON input up by half a page.
 func (p *jsonToolPage) InputHalfPageUp() {
 	textareaHalfPageUp(&p.input)
 }
 
+// Run executes the default JSON action, currently pretty printing.
 func (p *jsonToolPage) Run() {
 	p.runAction("json.pretty", nil)
 }
 
+// ClearInput clears JSON input and records undo history.
 func (p *jsonToolPage) ClearInput() {
 	p.pushInputUndo()
 	p.input.SetValue("")
 	p.inputRedo = nil
 }
 
+// ClearOutput clears raw and rendered output.
 func (p *jsonToolPage) ClearOutput() {
 	p.outputText = ""
 	p.outputErr = false
 	p.output.SetContent("")
 }
 
+// SetInput replaces JSON input and records undo history.
 func (p *jsonToolPage) SetInput(value string) {
 	p.pushInputUndo()
 	p.input.SetValue(value)
 	p.inputRedo = nil
 }
 
+// OutputText returns trimmed raw output for copy, save, and apply operations.
 func (p *jsonToolPage) OutputText() string {
 	return strings.TrimSpace(p.outputText)
 }
 
+// Status returns the latest user-facing JSON workbench status.
 func (p *jsonToolPage) Status() string {
 	return p.status
 }
 
+// HelpText returns a compact help summary for legacy callers.
 func (p *jsonToolPage) HelpText() string {
 	return "JSON Workspace | i edit | v paste | o path | p pretty | m minify | c check | s sort | e escape | u unescape | g get | a apply | z undo"
 }
 
+// FooterHints returns JSON-specific status bar shortcuts.
 func (p *jsonToolPage) FooterHints() string {
 	if p.IsEditing() {
 		if p.focus == pageFocusOptions {
@@ -2101,6 +2145,7 @@ func (p *jsonToolPage) FooterHints() string {
 	)
 }
 
+// HelpCommands returns structured JSON workbench commands for the help overlay.
 func (p *jsonToolPage) HelpCommands() []helpCommand {
 	return []helpCommand{
 		{Key: "i/Enter", Command: "Edit JSON Input", Description: "Enter insert mode for the JSON input editor."},
@@ -2120,10 +2165,12 @@ func (p *jsonToolPage) HelpCommands() []helpCommand {
 	}
 }
 
+// IsEditing reports whether key events should be routed to a text editor.
 func (p *jsonToolPage) IsEditing() bool {
 	return p.editing
 }
 
+// HandleKey handles JSON-specific normal-mode action shortcuts.
 func (p *jsonToolPage) HandleKey(key string) bool {
 	switch key {
 	case "p":

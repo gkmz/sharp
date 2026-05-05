@@ -11,6 +11,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// Register adds JSON formatting, querying, and string helper tools to r.
 func Register(r *tool.Registry) {
 	r.MustRegister(tool.SimpleTool{
 		IDValue:          "json.pretty",
