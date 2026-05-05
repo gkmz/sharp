@@ -1,5 +1,5 @@
-sharp
-sharp-output.txt
+/sharp
+/sharp-output.txt
 dist/
 build/
 *.test
