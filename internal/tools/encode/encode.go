@@ -8,6 +8,8 @@ import (
 	"html"
 	"net/url"
 	"strconv"
+	"strings"
+	"unicode"
 
 	"github.com/gkmz/sharp/pkg/tool"
 )
@@ -58,7 +60,7 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryEncode,
 		DescriptionValue: "Decode hex text.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			b, err := hex.DecodeString(input.Text)
+			b, err := hex.DecodeString(removeEncodingWhitespace(input.Text))
 			if err != nil {
 				return tool.Output{}, err
 			}
@@ -126,11 +128,21 @@ func base64DecodeTool(r *tool.Registry, id string, name string, fn func(string) 
 		CategoryValue:    tool.CategoryEncode,
 		DescriptionValue: fmt.Sprintf("%s text.", name),
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			b, err := fn(input.Text)
+			b, err := fn(removeEncodingWhitespace(input.Text))
 			if err != nil {
 				return tool.Output{}, err
 			}
 			return tool.Output{Text: string(b)}, nil
 		},
 	})
+}
+
+func removeEncodingWhitespace(s string) string {
+	// 编码文本经常来自复制粘贴或换行展示，解码前去掉空白能避免无意义的格式错误。
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
 }

@@ -147,6 +147,27 @@ func TestEncodeTools(t *testing.T) {
 	}
 }
 
+func TestDecodeToolsIgnoreFormattingWhitespace(t *testing.T) {
+	cases := []struct {
+		id    string
+		input string
+		want  string
+	}{
+		{id: "b64.decode", input: "aGVs bG8=", want: "hello"},
+		{id: "b64.decode", input: "aGVs\nbG8=", want: "hello"},
+		{id: "hex.decode", input: "68 65 6c 6c 6f", want: "hello"},
+		{id: "hex.decode", input: "68\t65\n6c 6c 6f", want: "hello"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.id+" whitespace", func(t *testing.T) {
+			out := runTool(t, tt.id, tt.input, nil)
+			if out.Text != tt.want {
+				t.Fatalf("%s output = %q, want %q", tt.id, out.Text, tt.want)
+			}
+		})
+	}
+}
+
 func TestCryptoTools(t *testing.T) {
 	cases := []struct {
 		id      string
