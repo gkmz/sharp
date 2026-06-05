@@ -124,21 +124,65 @@ func textTool(r *tool.Registry, id string, name string, description string, fn f
 
 func words(s string) []string {
 	parts := make([]string, 0)
-	var current strings.Builder
-	for _, r := range s {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			current.WriteRune(unicode.ToLower(r))
+	var current []rune
+	runes := []rune(s)
+	for i, r := range runes {
+		if !isWordRune(r) {
+			if len(current) > 0 {
+				parts = append(parts, lowerRunes(current))
+				current = current[:0]
+			}
 			continue
 		}
-		if current.Len() > 0 {
-			parts = append(parts, current.String())
-			current.Reset()
+		if len(current) > 0 && shouldSplitWord(current[len(current)-1], r, nextWordRune(runes, i+1)) {
+			parts = append(parts, lowerRunes(current))
+			current = current[:0]
 		}
+		current = append(current, r)
 	}
-	if current.Len() > 0 {
-		parts = append(parts, current.String())
+	if len(current) > 0 {
+		parts = append(parts, lowerRunes(current))
 	}
 	return parts
+}
+
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+func shouldSplitWord(prev rune, current rune, next rune) bool {
+	if unicode.IsDigit(prev) || unicode.IsDigit(current) {
+		return false
+	}
+	if unicode.IsUpper(current) && (unicode.IsLower(prev) || isUncasedLetter(prev)) {
+		return true
+	}
+	// 缩写后接普通词时在最后一个大写字母前拆分，例如 HTTPServer -> HTTP + Server。
+	return unicode.IsUpper(prev) && unicode.IsUpper(current) && next != 0 && unicode.IsLower(next)
+}
+
+func isUncasedLetter(r rune) bool {
+	return unicode.IsLetter(r) && !unicode.IsUpper(r) && !unicode.IsLower(r)
+}
+
+func nextWordRune(runes []rune, start int) rune {
+	for i := start; i < len(runes); i++ {
+		if isWordRune(runes[i]) {
+			return runes[i]
+		}
+		if len(strings.TrimSpace(string(runes[i]))) > 0 {
+			return 0
+		}
+	}
+	return 0
+}
+
+func lowerRunes(runes []rune) string {
+	var b strings.Builder
+	for _, r := range runes {
+		b.WriteRune(unicode.ToLower(r))
+	}
+	return b.String()
 }
 
 func camel(s string) string {

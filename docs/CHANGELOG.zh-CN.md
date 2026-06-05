@@ -65,4 +65,5 @@
 - URL 解析现在会拒绝 `http` 或 `https` 等网络 URL scheme 缺少 host 的输入。
 - HMAC 工具现在会在共享工具实现层拒绝空 key，不再只依赖 CLI/TUI 参数解析。
 - CSV 转 JSON 现在会在使用表头作为 JSON 对象 key 前去掉首尾空白。
+- 文本命名风格转换现在会保留 camelCase 和缩写词的词边界。
 - 补充项目 Agent 规范引用的 `RTK.md`。
