@@ -70,6 +70,9 @@ func Register(r *tool.Registry) {
 			if !json.Valid([]byte(input.Text)) {
 				return tool.Output{}, fmt.Errorf("invalid JSON")
 			}
+			if err := jsonutil.RejectDuplicateObjectKeys(input.Text); err != nil {
+				return tool.Output{}, err
+			}
 			result := gjson.Get(input.Text, path)
 			if !result.Exists() {
 				return tool.Output{}, fmt.Errorf("path not found: %s", path)

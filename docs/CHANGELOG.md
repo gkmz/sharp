@@ -61,4 +61,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - Timestamp unit detection now ignores leading zero padding when choosing seconds, milliseconds, or nanoseconds.
 - YAML to JSON now normalizes scalar map keys before encoding JSON and rejects normalized duplicate keys or alias cycles.
 - YAML to JSON now rejects multi-document YAML streams instead of silently converting only the first document.
+- JSON path queries now reject duplicate object keys instead of returning an ambiguous value.
 - Added the missing `RTK.md` referenced by project agent instructions.

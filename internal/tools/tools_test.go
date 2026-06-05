@@ -147,6 +147,18 @@ func TestLossyJSONTransformsRejectDuplicateObjectKeys(t *testing.T) {
 	}
 }
 
+func TestJSONGetRejectsDuplicateObjectKeys(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("json.get")
+	if !ok {
+		t.Fatal("json.get not registered")
+	}
+	_, err := current.Run(context.Background(), tool.Input{Text: `{"a":1,"a":2}`}, tool.Options{"path": "a"})
+	if err == nil || !strings.Contains(err.Error(), `duplicate JSON object key "a"`) {
+		t.Fatalf("json.get error = %v, want duplicate key error", err)
+	}
+}
+
 func TestEncodeTools(t *testing.T) {
 	pairs := []struct {
 		encodeID string
