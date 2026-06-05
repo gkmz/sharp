@@ -28,7 +28,7 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryText,
 		DescriptionValue: "Sort lines alphabetically.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			lines := strings.Split(strings.ReplaceAll(input.Text, "\r\n", "\n"), "\n")
+			lines := splitInputLines(input.Text)
 			sort.Strings(lines)
 			return tool.Output{Text: strings.Join(lines, "\n")}, nil
 		},
@@ -41,7 +41,7 @@ func Register(r *tool.Registry) {
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
 			seen := map[string]bool{}
 			var out []string
-			for _, line := range strings.Split(strings.ReplaceAll(input.Text, "\r\n", "\n"), "\n") {
+			for _, line := range splitInputLines(input.Text) {
 				if !seen[line] {
 					seen[line] = true
 					out = append(out, line)
@@ -98,6 +98,16 @@ func Register(r *tool.Registry) {
 			return tool.Output{Text: re.ReplaceAllString(input.Text, options["replacement"])}, nil
 		},
 	})
+}
+
+func splitInputLines(s string) []string {
+	normalized := strings.ReplaceAll(s, "\r\n", "\n")
+	lines := strings.Split(normalized, "\n")
+	if len(lines) > 1 && lines[len(lines)-1] == "" {
+		// 文本文件常以换行结尾；尾随换行不应在 sort/uniq 中额外制造一个空行。
+		lines = lines[:len(lines)-1]
+	}
+	return lines
 }
 
 func textTool(r *tool.Registry, id string, name string, description string, fn func(string) string) {

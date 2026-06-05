@@ -316,7 +316,11 @@ func TestTextTools(t *testing.T) {
 		{id: "text.kebab", input: "用户 Name Café", want: "用户-name-café"},
 		{id: "text.camel", input: "用户 name café", want: "用户NameCafé"},
 		{id: "text.sort", input: "b\na", want: "a\nb"},
+		{id: "text.sort", input: "b\na\n", want: "a\nb"},
+		{id: "text.sort", input: "b\r\na\r\n", want: "a\nb"},
+		{id: "text.sort", input: "b\n\na\n", want: "\na\nb"},
 		{id: "text.uniq", input: "a\nb\na", want: "a\nb"},
+		{id: "text.uniq", input: "a\nb\na\n", want: "a\nb"},
 		{id: "regex.test", input: "abc 123", options: tool.Options{"pattern": `\d+`}, want: "123"},
 		{id: "regex.replace", input: "abc 123", options: tool.Options{"pattern": `\d+`, "replacement": "NUM"}, want: "abc NUM"},
 	}
