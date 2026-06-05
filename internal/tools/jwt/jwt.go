@@ -1,7 +1,6 @@
 package jwt
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -10,6 +9,12 @@ import (
 
 	"github.com/gkmz/sharp/pkg/tool"
 )
+
+type decodedToken struct {
+	Header            json.RawMessage `json:"header"`
+	Payload           json.RawMessage `json:"payload"`
+	SignatureVerified bool            `json:"signatureVerified"`
+}
 
 // Register adds JWT inspection tools to r.
 func Register(r *tool.Registry) {
@@ -31,22 +36,26 @@ func Register(r *tool.Registry) {
 			if err != nil {
 				return tool.Output{}, fmt.Errorf("invalid payload: %w", err)
 			}
-			return tool.Output{Text: fmt.Sprintf("Header:\n%s\n\nPayload:\n%s\n\nSignature verified: false", header, payload), MimeType: "application/json"}, nil
+			// JWT 检查结果必须保持为合法 JSON，才能继续 pipe 到 JSON pretty/query 等工具。
+			b, err := json.MarshalIndent(decodedToken{Header: header, Payload: payload, SignatureVerified: false}, "", "  ")
+			if err != nil {
+				return tool.Output{}, err
+			}
+			return tool.Output{Text: string(b), MimeType: "application/json"}, nil
 		},
 	})
 }
 
-func decodePart(s string) (string, error) {
+func decodePart(s string) (json.RawMessage, error) {
 	if strings.TrimSpace(s) == "" {
-		return "", fmt.Errorf("part is empty")
+		return nil, fmt.Errorf("part is empty")
 	}
 	b, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	var buf bytes.Buffer
-	if err := json.Indent(&buf, b, "", "  "); err != nil {
-		return "", fmt.Errorf("part must be JSON: %w", err)
+	if !json.Valid(b) {
+		return nil, fmt.Errorf("part must be JSON")
 	}
-	return buf.String(), nil
+	return json.RawMessage(b), nil
 }

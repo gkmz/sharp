@@ -471,8 +471,19 @@ func TestCSVToJSONRejectsUnsafeHeaders(t *testing.T) {
 func TestJWTDecode(t *testing.T) {
 	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoic2hhcnAiLCJpYXQiOjE3MDAwMDAwMDB9.signature"
 	out := runTool(t, "jwt.decode", token, nil)
-	if !strings.Contains(out.Text, `"alg": "HS256"`) || !strings.Contains(out.Text, `"name": "sharp"`) {
+	var got struct {
+		Header            map[string]any `json:"header"`
+		Payload           map[string]any `json:"payload"`
+		SignatureVerified bool           `json:"signatureVerified"`
+	}
+	if err := json.Unmarshal([]byte(out.Text), &got); err != nil {
+		t.Fatalf("jwt.decode output = %q, want valid JSON: %v", out.Text, err)
+	}
+	if got.Header["alg"] != "HS256" || got.Payload["name"] != "sharp" || got.SignatureVerified {
 		t.Fatalf("jwt.decode output = %q, want decoded header and payload", out.Text)
+	}
+	if out.MimeType != "application/json" {
+		t.Fatalf("jwt.decode mime = %q, want application/json", out.MimeType)
 	}
 }
 
