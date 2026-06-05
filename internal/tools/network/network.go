@@ -116,6 +116,10 @@ func normalizeURLInput(raw string) string {
 			first = before
 		}
 	}
+	if strings.HasPrefix(first, "[") {
+		// 无 scheme 的 IPv6 host 会以 bracket 形式出现；它不是 opaque scheme，应按 host 解析。
+		return "//" + raw
+	}
 	if prefix, _, ok := strings.Cut(first, ":"); ok && prefix != "localhost" && !strings.Contains(prefix, ".") {
 		return raw
 	}

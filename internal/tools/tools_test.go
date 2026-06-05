@@ -370,6 +370,12 @@ func TestNetworkTools(t *testing.T) {
 		"path": "/path",
 	})
 
+	out = runTool(t, "url.parse", "[::1]:8080/path", nil)
+	assertJSONContains(t, out.Text, map[string]string{
+		"host": "[::1]:8080",
+		"path": "/path",
+	})
+
 	out = runTool(t, "url.parse", "mailto:user@example.com", nil)
 	assertJSONContains(t, out.Text, map[string]string{
 		"scheme": "mailto",

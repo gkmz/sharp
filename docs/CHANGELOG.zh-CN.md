@@ -57,4 +57,5 @@
 - JWT 解码现在会输出合法 JSON 对象，方便继续链到 JSON 工具处理。
 - JWT 解码现在会拒绝 header 或 payload 不是 JSON 对象的输入，包括对象 key 重复的情况。
 - 文本排序和去重工具现在不会把文件末尾换行当成额外空行处理。
+- URL 解析现在支持 `[::1]:8080/path` 这类无 scheme 的 bracketed IPv6 主机输入。
 - 补充项目 Agent 规范引用的 `RTK.md`。
