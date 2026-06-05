@@ -63,8 +63,12 @@ func Register(r *tool.Registry) {
 }
 
 func timestampDigitCount(s string) int {
-	// 时间戳单位只由数字位数决定，正负号不应让同量级数值走到不同单位分支。
-	return len(strings.TrimLeft(s, "+-"))
+	// 时间戳单位只由有效数字位数决定，正负号和前导零不应让同量级数值走到不同单位分支。
+	digits := strings.TrimLeft(strings.TrimLeft(s, "+-"), "0")
+	if digits == "" {
+		return 1
+	}
+	return len(digits)
 }
 
 func formatTime(t time.Time) string {

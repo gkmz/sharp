@@ -58,4 +58,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - JWT decode now rejects header or payload parts that are not JSON objects, including duplicate object keys.
 - Text sort and unique-line tools no longer treat a final file newline as an extra empty line.
 - URL parse now accepts scheme-less bracketed IPv6 hosts such as `[::1]:8080/path`.
+- Timestamp unit detection now ignores leading zero padding when choosing seconds, milliseconds, or nanoseconds.
 - Added the missing `RTK.md` referenced by project agent instructions.
