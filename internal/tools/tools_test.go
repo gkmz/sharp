@@ -193,8 +193,8 @@ func TestTimeFromDetectsUnitsByDigitCount(t *testing.T) {
 		input string
 		want  []string
 	}{
-		{name: "positive seconds", input: "999999999999", want: []string{"Unix seconds: 999999999999"}},
-		{name: "negative seconds", input: "-999999999999", want: []string{"Unix seconds: -999999999999"}},
+		{name: "positive seconds", input: "999999999999", want: []string{"Unix seconds: 999999999999", "Unix milliseconds: 999999999999000", "Unix nanoseconds: 999999999999000000000"}},
+		{name: "negative seconds", input: "-999999999999", want: []string{"Unix seconds: -999999999999", "Unix milliseconds: -999999999999000", "Unix nanoseconds: -999999999999000000000"}},
 		{name: "positive milliseconds", input: "1000000000000", want: []string{"Unix seconds: 1000000000", "Unix milliseconds: 1000000000000"}},
 		{name: "negative milliseconds", input: "-1000000000000", want: []string{"Unix seconds: -1000000000", "Unix milliseconds: -1000000000000"}},
 		{name: "positive nanoseconds", input: "1000000000000000000", want: []string{"Unix seconds: 1000000000", "Unix nanoseconds: 1000000000000000000"}},

@@ -3,6 +3,7 @@ package timeutil
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -67,13 +68,27 @@ func timestampDigitCount(s string) int {
 }
 
 func formatTime(t time.Time) string {
-	return fmt.Sprintf("Local: %s\nUTC:   %s\nUnix seconds: %d\nUnix milliseconds: %d\nUnix nanoseconds: %d",
+	return fmt.Sprintf("Local: %s\nUTC:   %s\nUnix seconds: %d\nUnix milliseconds: %s\nUnix nanoseconds: %s",
 		t.Local().Format(time.RFC3339Nano),
 		t.UTC().Format(time.RFC3339Nano),
 		t.Unix(),
-		t.UnixMilli(),
-		t.UnixNano(),
+		unixMillisecondsString(t),
+		unixNanosecondsString(t),
 	)
+}
+
+func unixMillisecondsString(t time.Time) string {
+	seconds := big.NewInt(t.Unix())
+	milliseconds := new(big.Int).Mul(seconds, big.NewInt(1_000))
+	// 使用秒内纳秒余量计算毫秒，避免 time.UnixMilli 在极端年份上出现未定义结果。
+	return milliseconds.Add(milliseconds, big.NewInt(int64(t.Nanosecond()/1_000_000))).String()
+}
+
+func unixNanosecondsString(t time.Time) string {
+	seconds := big.NewInt(t.Unix())
+	nanoseconds := new(big.Int).Mul(seconds, big.NewInt(1_000_000_000))
+	// 使用大整数保留完整 Unix 纳秒值，避免 time.UnixNano 的 int64 溢出边界。
+	return nanoseconds.Add(nanoseconds, big.NewInt(int64(t.Nanosecond()))).String()
 }
 
 func parseTime(s string) (time.Time, error) {

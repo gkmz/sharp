@@ -47,4 +47,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - CSV to JSON now rejects empty or duplicated headers instead of producing ambiguous output.
 - CLI tool commands now accept dash-prefixed input such as `-hello` and negative timestamps without requiring `--`.
 - Time timestamp conversion now detects seconds, milliseconds, and nanoseconds by digit count without treating signs as digits.
+- Time output now avoids undefined `UnixNano` overflow values for timestamps outside Go's native nanosecond range.
 - Added the missing `RTK.md` referenced by project agent instructions.
