@@ -108,24 +108,18 @@ func addToolCommands(root *cobra.Command, registry *tool.Registry) {
 
 func toolCommand(name string, t tool.Tool) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   name + " [input-or-file]",
-		Short: t.Description(),
+		Use:                name + " [input-or-file]",
+		Short:              t.Description(),
+		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			options := tool.Options{}
-			for _, opt := range t.Options() {
-				value, err := cmd.Flags().GetString(opt.Name)
-				if err != nil {
-					return err
-				}
-				if value == "" {
-					value = opt.Default
-				}
-				if opt.Required && value == "" {
-					return fmt.Errorf("missing required option: --%s", opt.Name)
-				}
-				options[opt.Name] = value
+			if toolHelpRequested(args) {
+				return cmd.Help()
 			}
-			input, err := resolveInput(cmd, args)
+			options, inputArgs, err := parseToolCommandArgs(args, t.Options())
+			if err != nil {
+				return err
+			}
+			input, err := resolveInput(cmd, inputArgs)
 			if err != nil {
 				return err
 			}
@@ -141,6 +135,65 @@ func toolCommand(name string, t tool.Tool) *cobra.Command {
 		cmd.Flags().String(opt.Name, opt.Default, opt.Description)
 	}
 	return cmd
+}
+
+func toolHelpRequested(args []string) bool {
+	for _, arg := range args {
+		if arg == "--" {
+			return false
+		}
+		if arg == "--help" || arg == "-h" {
+			return true
+		}
+	}
+	return false
+}
+
+func parseToolCommandArgs(args []string, optionDefs []tool.Option) (tool.Options, []string, error) {
+	options := tool.Options{}
+	known := map[string]tool.Option{}
+	for _, opt := range optionDefs {
+		options[opt.Name] = opt.Default
+		known[opt.Name] = opt
+	}
+
+	inputArgs := []string{}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			// `--` 是 POSIX 风格的选项结束符；后续内容即使以短横线开头也必须保留为原始输入。
+			inputArgs = append(inputArgs, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "--") && len(arg) > 2 {
+			raw := strings.TrimPrefix(arg, "--")
+			name, value, hasValue := strings.Cut(raw, "=")
+			opt, ok := known[name]
+			if name == "" || !ok {
+				return nil, nil, fmt.Errorf("unknown option: --%s", name)
+			}
+			if !hasValue {
+				if i+1 >= len(args) {
+					return nil, nil, fmt.Errorf("missing value for option: --%s", name)
+				}
+				i++
+				value = args[i]
+			}
+			if value == "" {
+				value = opt.Default
+			}
+			options[name] = value
+			continue
+		}
+		inputArgs = append(inputArgs, arg)
+	}
+
+	for _, opt := range optionDefs {
+		if opt.Required && options[opt.Name] == "" {
+			return nil, nil, fmt.Errorf("missing required option: --%s", opt.Name)
+		}
+	}
+	return options, inputArgs, nil
 }
 
 func resolveInput(cmd *cobra.Command, args []string) (string, error) {

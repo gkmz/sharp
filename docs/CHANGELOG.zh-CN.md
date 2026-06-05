@@ -45,4 +45,5 @@
 - URL 解析会保留 `mailto:` 等 opaque URL 的数据。
 - HTTP Header 转 JSON 会把重复 header 值保留为数组。
 - CSV 转 JSON 会拒绝空表头和重复表头，避免生成有歧义的输出。
+- CLI 工具命令现在支持 `-hello` 和负数时间戳这类短横线开头输入，不再要求手动添加 `--`。
 - 补充项目 Agent 规范引用的 `RTK.md`。

@@ -45,4 +45,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - URL parse now preserves opaque URL data for schemes such as `mailto:`.
 - HTTP header conversion now preserves duplicate header values as arrays.
 - CSV to JSON now rejects empty or duplicated headers instead of producing ambiguous output.
+- CLI tool commands now accept dash-prefixed input such as `-hello` and negative timestamps without requiring `--`.
 - Added the missing `RTK.md` referenced by project agent instructions.
