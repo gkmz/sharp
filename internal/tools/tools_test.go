@@ -505,6 +505,18 @@ func TestYAMLToJSONRejectsAliasCycle(t *testing.T) {
 	}
 }
 
+func TestYAMLToJSONRejectsMultipleDocuments(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("yaml.to_json")
+	if !ok {
+		t.Fatal("yaml.to_json not registered")
+	}
+	_, err := current.Run(context.Background(), tool.Input{Text: "a: 1\n---\nb: 2\n"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "YAML stream contains multiple documents") {
+		t.Fatalf("yaml.to_json error = %v, want multiple document error", err)
+	}
+}
+
 func TestCSVToJSONRejectsUnsafeHeaders(t *testing.T) {
 	cases := []struct {
 		input string

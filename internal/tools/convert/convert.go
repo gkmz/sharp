@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -41,8 +42,8 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryConvert,
 		DescriptionValue: "Convert YAML to JSON.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			var doc yaml.Node
-			if err := yaml.Unmarshal([]byte(input.Text), &doc); err != nil {
+			doc, err := decodeSingleYAMLDocument(input.Text)
+			if err != nil {
 				return tool.Output{}, err
 			}
 			v, err := yamlNodeToJSONValue(&doc)
@@ -121,6 +122,26 @@ func Register(r *tool.Registry) {
 			return tool.Output{Text: string(b), MimeType: "application/json"}, nil
 		},
 	})
+}
+
+func decodeSingleYAMLDocument(input string) (yaml.Node, error) {
+	decoder := yaml.NewDecoder(strings.NewReader(input))
+	var doc yaml.Node
+	if err := decoder.Decode(&doc); err != nil {
+		if err == io.EOF {
+			return yaml.Node{}, nil
+		}
+		return yaml.Node{}, err
+	}
+	var extra yaml.Node
+	if err := decoder.Decode(&extra); err != nil {
+		if err == io.EOF {
+			return doc, nil
+		}
+		return yaml.Node{}, err
+	}
+	// JSON 只有一个根值；多文档 YAML 若只取第一段会静默丢数据，因此直接拒绝。
+	return yaml.Node{}, fmt.Errorf("YAML stream contains multiple documents")
 }
 
 func yamlNodeToJSONValue(n *yaml.Node) (any, error) {
