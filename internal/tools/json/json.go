@@ -73,6 +73,9 @@ func Register(r *tool.Registry) {
 			if !result.Exists() {
 				return tool.Output{}, fmt.Errorf("path not found: %s", path)
 			}
+			if result.Type == gjson.Null {
+				return tool.Output{Text: "null", MimeType: "application/json"}, nil
+			}
 			if result.IsArray() || result.IsObject() {
 				var buf bytes.Buffer
 				if err := json.Indent(&buf, []byte(result.Raw), "", "  "); err != nil {

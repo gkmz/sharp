@@ -106,6 +106,7 @@ func TestJSONTools(t *testing.T) {
 		{name: "escape", id: "json.escape", input: `{"a":1}`, want: `"{\"a\":1}"`},
 		{name: "unescape", id: "json.unescape", input: `"{\"a\":1}"`, want: `{"a":1}`},
 		{name: "get", id: "json.get", input: `{"data":{"name":"sharp"}}`, options: tool.Options{"path": "data.name"}, want: "sharp"},
+		{name: "get null", id: "json.get", input: `{"data":{"name":null}}`, options: tool.Options{"path": "data.name"}, want: "null"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -52,4 +52,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - CLI tools without options now accept double-dash-prefixed input such as `--hello` without requiring an extra `--` separator.
 - TUI no-input tools now hide the `options` shortcut when the selected tool has no configurable options.
 - HTTP header conversion now canonicalizes case-insensitive header names before merging duplicate values.
+- JSON path queries now print `null` for existing null values instead of an empty line.
 - Added the missing `RTK.md` referenced by project agent instructions.
