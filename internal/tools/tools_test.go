@@ -458,6 +458,53 @@ func TestConvertTools(t *testing.T) {
 	}
 }
 
+func TestYAMLToJSONNormalizesScalarKeys(t *testing.T) {
+	out := runTool(t, "yaml.to_json", "1: one\ntrue: ok\nnested:\n  2: two\nitems:\n  - 3: three\n", nil)
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out.Text), &got); err != nil {
+		t.Fatalf("yaml.to_json output = %q, want valid JSON: %v", out.Text, err)
+	}
+	if got["1"] != "one" || got["true"] != "ok" {
+		t.Fatalf("yaml.to_json output = %q, want scalar map keys normalized as JSON keys", out.Text)
+	}
+	nested, ok := got["nested"].(map[string]any)
+	if !ok || nested["2"] != "two" {
+		t.Fatalf("yaml.to_json output = %q, want nested scalar map keys normalized", out.Text)
+	}
+	items, ok := got["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("yaml.to_json output = %q, want list item preserved", out.Text)
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok || item["3"] != "three" {
+		t.Fatalf("yaml.to_json output = %q, want scalar keys normalized inside lists", out.Text)
+	}
+}
+
+func TestYAMLToJSONRejectsNormalizedDuplicateKeys(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("yaml.to_json")
+	if !ok {
+		t.Fatal("yaml.to_json not registered")
+	}
+	_, err := current.Run(context.Background(), tool.Input{Text: "1: one\n\"1\": uno\n"}, nil)
+	if err == nil || !strings.Contains(err.Error(), `YAML map key "1" is duplicated after JSON normalization`) {
+		t.Fatalf("yaml.to_json error = %v, want normalized duplicate key error", err)
+	}
+}
+
+func TestYAMLToJSONRejectsAliasCycle(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("yaml.to_json")
+	if !ok {
+		t.Fatal("yaml.to_json not registered")
+	}
+	_, err := current.Run(context.Background(), tool.Input{Text: "a: &a [*a]\n"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "YAML alias cycle is not supported") {
+		t.Fatalf("yaml.to_json error = %v, want alias cycle error", err)
+	}
+}
+
 func TestCSVToJSONRejectsUnsafeHeaders(t *testing.T) {
 	cases := []struct {
 		input string

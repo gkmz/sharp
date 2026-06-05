@@ -59,4 +59,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - Text sort and unique-line tools no longer treat a final file newline as an extra empty line.
 - URL parse now accepts scheme-less bracketed IPv6 hosts such as `[::1]:8080/path`.
 - Timestamp unit detection now ignores leading zero padding when choosing seconds, milliseconds, or nanoseconds.
+- YAML to JSON now normalizes scalar map keys before encoding JSON and rejects normalized duplicate keys or alias cycles.
 - Added the missing `RTK.md` referenced by project agent instructions.

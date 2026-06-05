@@ -41,8 +41,12 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryConvert,
 		DescriptionValue: "Convert YAML to JSON.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			var v any
-			if err := yaml.Unmarshal([]byte(input.Text), &v); err != nil {
+			var doc yaml.Node
+			if err := yaml.Unmarshal([]byte(input.Text), &doc); err != nil {
+				return tool.Output{}, err
+			}
+			v, err := yamlNodeToJSONValue(&doc)
+			if err != nil {
 				return tool.Output{}, err
 			}
 			b, err := json.MarshalIndent(v, "", "  ")
@@ -117,6 +121,107 @@ func Register(r *tool.Registry) {
 			return tool.Output{Text: string(b), MimeType: "application/json"}, nil
 		},
 	})
+}
+
+func yamlNodeToJSONValue(n *yaml.Node) (any, error) {
+	return yamlNodeToJSONValueWithStack(n, map[*yaml.Node]bool{})
+}
+
+func yamlNodeToJSONValueWithStack(n *yaml.Node, visiting map[*yaml.Node]bool) (any, error) {
+	if n == nil {
+		return nil, nil
+	}
+	if visiting[n] {
+		return nil, fmt.Errorf("YAML alias cycle is not supported")
+	}
+	visiting[n] = true
+	defer delete(visiting, n)
+
+	switch n.Kind {
+	case 0:
+		return nil, nil
+	case yaml.DocumentNode:
+		if len(n.Content) == 0 {
+			return nil, nil
+		}
+		return yamlNodeToJSONValueWithStack(n.Content[0], visiting)
+	case yaml.MappingNode:
+		out := make(map[string]any, len(n.Content)/2)
+		for i := 0; i < len(n.Content); i += 2 {
+			// YAML 允许数字、布尔等标量作为 map key；转换为 JSON 时必须先规范化为字符串 key。
+			normalizedKey, err := yamlScalarKeyToString(n.Content[i])
+			if err != nil {
+				return nil, err
+			}
+			if _, exists := out[normalizedKey]; exists {
+				return nil, fmt.Errorf("YAML map key %q is duplicated after JSON normalization", normalizedKey)
+			}
+			normalizedValue, err := yamlNodeToJSONValueWithStack(n.Content[i+1], visiting)
+			if err != nil {
+				return nil, err
+			}
+			out[normalizedKey] = normalizedValue
+		}
+		return out, nil
+	case yaml.SequenceNode:
+		out := make([]any, len(n.Content))
+		for i, item := range n.Content {
+			normalizedItem, err := yamlNodeToJSONValueWithStack(item, visiting)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = normalizedItem
+		}
+		return out, nil
+	case yaml.ScalarNode:
+		var v any
+		if err := n.Decode(&v); err != nil {
+			return nil, err
+		}
+		return v, nil
+	case yaml.AliasNode:
+		return yamlNodeToJSONValueWithStack(n.Alias, visiting)
+	default:
+		return nil, fmt.Errorf("unsupported YAML node kind: %d", n.Kind)
+	}
+}
+
+func yamlScalarKeyToString(n *yaml.Node) (string, error) {
+	if n == nil || n.Kind != yaml.ScalarNode {
+		return "", fmt.Errorf("unsupported YAML map key type: %s", yamlNodeTypeName(n))
+	}
+	var key any
+	if err := n.Decode(&key); err != nil {
+		return "", err
+	}
+	switch x := key.(type) {
+	case string:
+		return x, nil
+	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		return fmt.Sprint(x), nil
+	default:
+		return "", fmt.Errorf("unsupported YAML map key type: %T", key)
+	}
+}
+
+func yamlNodeTypeName(n *yaml.Node) string {
+	if n == nil {
+		return "<nil>"
+	}
+	switch n.Kind {
+	case yaml.DocumentNode:
+		return "document"
+	case yaml.SequenceNode:
+		return "sequence"
+	case yaml.MappingNode:
+		return "mapping"
+	case yaml.ScalarNode:
+		return "scalar"
+	case yaml.AliasNode:
+		return "alias"
+	default:
+		return fmt.Sprintf("kind %d", n.Kind)
+	}
 }
 
 func validateCSVHeader(header []string) error {
