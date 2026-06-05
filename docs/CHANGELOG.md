@@ -39,5 +39,8 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - Secret options are masked in the normal TUI workspace view.
 - Text case conversion now preserves Unicode letters and digits instead of dropping non-ASCII words.
 - JWT decode now rejects malformed token shapes instead of accepting partial or extra segments.
+- JWT decode now requires JSON header and payload segments.
 - Network parsers now return clear errors for empty or path-only input.
+- URL parse now accepts common scheme-less host input such as `example.com/path`.
+- HTTP header conversion now preserves duplicate header values as arrays.
 - Added the missing `RTK.md` referenced by project agent instructions.

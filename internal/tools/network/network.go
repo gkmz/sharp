@@ -24,7 +24,7 @@ func Register(r *tool.Registry) {
 			if raw == "" {
 				return tool.Output{}, fmt.Errorf("URL is required")
 			}
-			u, err := url.Parse(raw)
+			u, err := url.Parse(normalizeURLInput(raw))
 			if err != nil {
 				return tool.Output{}, err
 			}
@@ -103,4 +103,20 @@ func Register(r *tool.Registry) {
 			return tool.Output{Text: fmt.Sprintf("IP: %s\nNetwork: %s\nPrefix: %d\nBits: %d", ip, network, ones, bits)}, nil
 		},
 	})
+}
+
+func normalizeURLInput(raw string) string {
+	if strings.Contains(raw, "://") || strings.HasPrefix(raw, "//") {
+		return raw
+	}
+	first := raw
+	for _, sep := range []string{"/", "?", "#"} {
+		if before, _, ok := strings.Cut(first, sep); ok {
+			first = before
+		}
+	}
+	if first == "localhost" || strings.Contains(first, ".") || strings.Contains(first, ":") {
+		return "//" + raw
+	}
+	return raw
 }

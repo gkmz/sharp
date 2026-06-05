@@ -46,7 +46,7 @@ func decodePart(s string) (string, error) {
 	}
 	var buf bytes.Buffer
 	if err := json.Indent(&buf, b, "", "  "); err != nil {
-		return string(b), nil
+		return "", fmt.Errorf("part must be JSON: %w", err)
 	}
 	return buf.String(), nil
 }

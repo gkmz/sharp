@@ -84,7 +84,7 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryConvert,
 		DescriptionValue: "Convert HTTP headers to JSON.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			out := map[string]string{}
+			out := map[string]any{}
 			for _, line := range strings.Split(input.Text, "\n") {
 				if strings.TrimSpace(line) == "" {
 					continue
@@ -93,7 +93,12 @@ func Register(r *tool.Registry) {
 				if len(parts) != 2 {
 					return tool.Output{}, fmt.Errorf("invalid header line: %s", line)
 				}
-				out[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+				name := strings.TrimSpace(parts[0])
+				value := strings.TrimSpace(parts[1])
+				if name == "" {
+					return tool.Output{}, fmt.Errorf("header name cannot be empty")
+				}
+				appendHeaderValue(out, name, value)
 			}
 			b, err := json.MarshalIndent(out, "", "  ")
 			if err != nil {
@@ -102,4 +107,18 @@ func Register(r *tool.Registry) {
 			return tool.Output{Text: string(b), MimeType: "application/json"}, nil
 		},
 	})
+}
+
+func appendHeaderValue(out map[string]any, name string, value string) {
+	existing, ok := out[name]
+	if !ok {
+		out[name] = value
+		return
+	}
+	switch x := existing.(type) {
+	case string:
+		out[name] = []string{x, value}
+	case []string:
+		out[name] = append(x, value)
+	}
 }

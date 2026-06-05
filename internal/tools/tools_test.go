@@ -277,6 +277,13 @@ func TestNetworkTools(t *testing.T) {
 		"fragment": "frag",
 	})
 
+	out = runTool(t, "url.parse", "example.com/path?q=1", nil)
+	assertJSONContains(t, out.Text, map[string]string{
+		"host":     "example.com",
+		"path":     "/path",
+		"rawQuery": "q=1",
+	})
+
 	out = runTool(t, "query.parse", "?a=1&b=2", nil)
 	if !strings.Contains(out.Text, `"a":`) || !strings.Contains(out.Text, `"1"`) {
 		t.Fatalf("query.parse output = %q, want parsed query JSON", out.Text)
@@ -333,9 +340,12 @@ func TestConvertTools(t *testing.T) {
 		t.Fatalf("csv.to_json output = %q, want JSON array", out.Text)
 	}
 
-	out = runTool(t, "headers.to_json", "Content-Type: application/json\nX-Test: yes", nil)
+	out = runTool(t, "headers.to_json", "Content-Type: application/json\nX-Test: yes\nSet-Cookie: a\nSet-Cookie: b", nil)
 	if !strings.Contains(out.Text, `"Content-Type": "application/json"`) || !strings.Contains(out.Text, `"X-Test": "yes"`) {
 		t.Fatalf("headers.to_json output = %q, want header JSON", out.Text)
+	}
+	if !strings.Contains(out.Text, `"Set-Cookie": [`) || !strings.Contains(out.Text, `"a"`) || !strings.Contains(out.Text, `"b"`) {
+		t.Fatalf("headers.to_json output = %q, want duplicate headers preserved as array", out.Text)
 	}
 }
 
@@ -359,6 +369,17 @@ func TestJWTDecodeRejectsMalformedTokenShape(t *testing.T) {
 				t.Fatalf("jwt.decode returned nil error for malformed token %q", input)
 			}
 		})
+	}
+}
+
+func TestJWTDecodeRejectsNonJSONParts(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("jwt.decode")
+	if !ok {
+		t.Fatal("jwt.decode not registered")
+	}
+	if _, err := current.Run(context.Background(), tool.Input{Text: "bm90anNvbg.bm90anNvbg.sig"}, nil); err == nil {
+		t.Fatal("jwt.decode returned nil error for non-JSON header and payload")
 	}
 }
 

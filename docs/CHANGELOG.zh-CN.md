@@ -39,5 +39,8 @@
 - 敏感参数会在 TUI 普通工作区视图中遮蔽显示。
 - 文本命名风格转换会保留 Unicode 字母和数字，不再丢弃非 ASCII 词。
 - JWT 解码会拒绝缺段或多段 token，不再接受非标准形态。
+- JWT 解码要求 header 和 payload 段必须是 JSON。
 - Network 解析类工具遇到空输入或仅路径输入时会返回清晰错误。
+- URL 解析支持 `example.com/path` 这类常见的无 scheme 主机输入。
+- HTTP Header 转 JSON 会把重复 header 值保留为数组。
 - 补充项目 Agent 规范引用的 `RTK.md`。
