@@ -187,6 +187,30 @@ func TestTimeTools(t *testing.T) {
 	}
 }
 
+func TestTimeFromDetectsUnitsByDigitCount(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{name: "positive seconds", input: "999999999999", want: []string{"Unix seconds: 999999999999"}},
+		{name: "negative seconds", input: "-999999999999", want: []string{"Unix seconds: -999999999999"}},
+		{name: "positive milliseconds", input: "1000000000000", want: []string{"Unix seconds: 1000000000", "Unix milliseconds: 1000000000000"}},
+		{name: "negative milliseconds", input: "-1000000000000", want: []string{"Unix seconds: -1000000000", "Unix milliseconds: -1000000000000"}},
+		{name: "positive nanoseconds", input: "1000000000000000000", want: []string{"Unix seconds: 1000000000", "Unix nanoseconds: 1000000000000000000"}},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			out := runTool(t, "time.from", tt.input, nil)
+			for _, want := range tt.want {
+				if !strings.Contains(out.Text, want) {
+					t.Fatalf("time.from output = %q, want %q", out.Text, want)
+				}
+			}
+		})
+	}
+}
+
 func TestGeneratorTools(t *testing.T) {
 	out := runTool(t, "uuid.v4", "", nil)
 	if len(out.Text) != 36 || strings.Count(out.Text, "-") != 4 {

@@ -26,7 +26,7 @@ func Register(r *tool.Registry) {
 		IDValue:          "time.from",
 		NameValue:        "Timestamp to Time",
 		CategoryValue:    tool.CategoryTime,
-		DescriptionValue: "Convert Unix seconds or milliseconds to datetime.",
+		DescriptionValue: "Convert Unix seconds, milliseconds, or nanoseconds to datetime.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
 			s := strings.TrimSpace(input.Text)
 			n, err := strconv.ParseInt(s, 10, 64)
@@ -34,10 +34,11 @@ func Register(r *tool.Registry) {
 				return tool.Output{}, fmt.Errorf("invalid timestamp: %w", err)
 			}
 			var t time.Time
+			digits := timestampDigitCount(s)
 			switch {
-			case len(s) >= 19:
+			case digits >= 19:
 				t = time.Unix(0, n)
-			case len(s) >= 13:
+			case digits >= 13:
 				t = time.UnixMilli(n)
 			default:
 				t = time.Unix(n, 0)
@@ -58,6 +59,11 @@ func Register(r *tool.Registry) {
 			return tool.Output{Text: formatTime(t)}, nil
 		},
 	})
+}
+
+func timestampDigitCount(s string) int {
+	// 时间戳单位只由数字位数决定，正负号不应让同量级数值走到不同单位分支。
+	return len(strings.TrimLeft(s, "+-"))
 }
 
 func formatTime(t time.Time) string {
