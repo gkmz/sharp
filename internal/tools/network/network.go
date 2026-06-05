@@ -33,6 +33,7 @@ func Register(r *tool.Registry) {
 			}
 			data := map[string]any{
 				"scheme":   u.Scheme,
+				"opaque":   u.Opaque,
 				"host":     u.Host,
 				"path":     u.Path,
 				"rawQuery": u.RawQuery,
@@ -114,6 +115,9 @@ func normalizeURLInput(raw string) string {
 		if before, _, ok := strings.Cut(first, sep); ok {
 			first = before
 		}
+	}
+	if prefix, _, ok := strings.Cut(first, ":"); ok && prefix != "localhost" && !strings.Contains(prefix, ".") {
+		return raw
 	}
 	if first == "localhost" || strings.Contains(first, ".") || strings.Contains(first, ":") {
 		return "//" + raw

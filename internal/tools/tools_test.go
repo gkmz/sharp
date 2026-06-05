@@ -284,6 +284,24 @@ func TestNetworkTools(t *testing.T) {
 		"rawQuery": "q=1",
 	})
 
+	out = runTool(t, "url.parse", "example.com:8080/path", nil)
+	assertJSONContains(t, out.Text, map[string]string{
+		"host": "example.com:8080",
+		"path": "/path",
+	})
+
+	out = runTool(t, "url.parse", "localhost:8080/path", nil)
+	assertJSONContains(t, out.Text, map[string]string{
+		"host": "localhost:8080",
+		"path": "/path",
+	})
+
+	out = runTool(t, "url.parse", "mailto:user@example.com", nil)
+	assertJSONContains(t, out.Text, map[string]string{
+		"scheme": "mailto",
+		"opaque": "user@example.com",
+	})
+
 	out = runTool(t, "query.parse", "?a=1&b=2", nil)
 	if !strings.Contains(out.Text, `"a":`) || !strings.Contains(out.Text, `"1"`) {
 		t.Fatalf("query.parse output = %q, want parsed query JSON", out.Text)

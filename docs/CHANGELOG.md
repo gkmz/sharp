@@ -42,5 +42,6 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - JWT decode now requires JSON header and payload segments.
 - Network parsers now return clear errors for empty or path-only input.
 - URL parse now accepts common scheme-less host input such as `example.com/path`.
+- URL parse now preserves opaque URL data for schemes such as `mailto:`.
 - HTTP header conversion now preserves duplicate header values as arrays.
 - Added the missing `RTK.md` referenced by project agent instructions.

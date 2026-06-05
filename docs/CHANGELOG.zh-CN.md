@@ -42,5 +42,6 @@
 - JWT 解码要求 header 和 payload 段必须是 JSON。
 - Network 解析类工具遇到空输入或仅路径输入时会返回清晰错误。
 - URL 解析支持 `example.com/path` 这类常见的无 scheme 主机输入。
+- URL 解析会保留 `mailto:` 等 opaque URL 的数据。
 - HTTP Header 转 JSON 会把重复 header 值保留为数组。
 - 补充项目 Agent 规范引用的 `RTK.md`。
