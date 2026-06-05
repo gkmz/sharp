@@ -62,4 +62,5 @@
 - YAML 转 JSON 现在会先规范化标量 map key，并拒绝规范化后重复的 key 或 alias 循环。
 - YAML 转 JSON 现在会拒绝多文档 YAML stream，不再静默只转换第一段文档。
 - JSON 路径查询现在会拒绝重复对象 key，不再返回有歧义的值。
+- URL 解析现在会拒绝 `http` 或 `https` 等网络 URL scheme 缺少 host 的输入。
 - 补充项目 Agent 规范引用的 `RTK.md`。

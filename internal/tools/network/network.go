@@ -31,6 +31,9 @@ func Register(r *tool.Registry) {
 			if u.Scheme == "" && u.Host == "" {
 				return tool.Output{}, fmt.Errorf("URL must include a scheme or host")
 			}
+			if urlSchemeRequiresHost(u.Scheme) && u.Host == "" {
+				return tool.Output{}, fmt.Errorf("URL scheme %q requires a host", u.Scheme)
+			}
 			data := map[string]any{
 				"scheme":   u.Scheme,
 				"opaque":   u.Opaque,
@@ -127,4 +130,13 @@ func normalizeURLInput(raw string) string {
 		return "//" + raw
 	}
 	return raw
+}
+
+func urlSchemeRequiresHost(scheme string) bool {
+	switch strings.ToLower(scheme) {
+	case "http", "https", "ws", "wss", "ftp":
+		return true
+	default:
+		return false
+	}
 }

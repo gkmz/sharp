@@ -418,6 +418,8 @@ func TestNetworkEmptyInputsReturnActionableErrors(t *testing.T) {
 	}{
 		{id: "url.parse", input: "", want: "URL is required"},
 		{id: "url.parse", input: "just-a-path", want: "URL must include a scheme or host"},
+		{id: "url.parse", input: "http:///path", want: `URL scheme "http" requires a host`},
+		{id: "url.parse", input: "https:?q=1", want: `URL scheme "https" requires a host`},
 		{id: "query.parse", input: "?", want: "query string is required"},
 		{id: "dns.lookup", input: "", want: "host is required"},
 		{id: "cidr.parse", input: "", want: "CIDR is required"},
