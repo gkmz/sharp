@@ -1772,14 +1772,20 @@ func (p *genericToolPage) HelpCommands() []helpCommand {
 // FooterHints returns status bar shortcuts customized to the current tool shape.
 func (p *genericToolPage) FooterHints() string {
 	if !p.hasInput {
-		return statusLine(p.tool.Name(),
+		hints := []string{
 			statusHint("r", "run"),
-			statusHint("o", "options"),
+		}
+		if p.hasOptions {
+			// 只有存在参数的工具才展示 options 快捷键，避免 UUID 等无参数工具出现不可用提示。
+			hints = append(hints, statusHint("o", "options"))
+		}
+		hints = append(hints,
 			statusHint("y", "copy"),
 			statusHint("s", "save"),
 			statusHint("X", "clear out"),
 			statusHint("?", "help"),
 		)
+		return statusLine(p.tool.Name(), hints...)
 	}
 	return ""
 }

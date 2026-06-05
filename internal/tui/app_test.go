@@ -468,6 +468,44 @@ func TestJSONFooterShowsCommonActions(t *testing.T) {
 	}
 }
 
+func TestGenericFooterHidesUnavailableOptionsShortcut(t *testing.T) {
+	page := newGenericToolPage(tool.SimpleTool{
+		IDValue:          "uuid.v4",
+		NameValue:        "UUID v4",
+		CategoryValue:    tool.CategoryGenerator,
+		DescriptionValue: "generate UUID",
+		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
+			return tool.Output{Text: "id"}, nil
+		},
+	})
+
+	footer := stripANSI(page.FooterHints())
+	if strings.Contains(footer, "[o] options") {
+		t.Fatalf("FooterHints() = %q, should not show options shortcut for optionless tool", footer)
+	}
+	if !strings.Contains(footer, "[r] run") || !strings.Contains(footer, "[?] help") {
+		t.Fatalf("FooterHints() = %q, want common no-input shortcuts", footer)
+	}
+}
+
+func TestGenericFooterShowsOptionsShortcutWhenAvailable(t *testing.T) {
+	page := newGenericToolPage(tool.SimpleTool{
+		IDValue:          "password",
+		NameValue:        "Random Password",
+		CategoryValue:    tool.CategoryGenerator,
+		DescriptionValue: "generate password",
+		OptionsValue:     []tool.Option{{Name: "length", Description: "Password length", Default: "24"}},
+		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
+			return tool.Output{Text: "secret"}, nil
+		},
+	})
+
+	footer := stripANSI(page.FooterHints())
+	if !strings.Contains(footer, "[o] options") {
+		t.Fatalf("FooterHints() = %q, want options shortcut for configurable tool", footer)
+	}
+}
+
 func TestStatusHintHighlightsShortcutKey(t *testing.T) {
 	hint := statusHint("p", "pretty")
 	if got := stripANSI(hint); got != "[p] pretty" {
