@@ -8,8 +8,10 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
+	"fmt"
 	"hash"
 	"hash/crc32"
+	"strings"
 
 	"github.com/gkmz/sharp/pkg/tool"
 )
@@ -63,7 +65,11 @@ func hmacTool(r *tool.Registry, id string, name string, newHash func() hash.Hash
 			Secret:      true,
 		}},
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			mac := hmac.New(newHash, []byte(options["key"]))
+			key := options["key"]
+			if strings.TrimSpace(key) == "" {
+				return tool.Output{}, fmt.Errorf("missing required option: key")
+			}
+			mac := hmac.New(newHash, []byte(key))
 			_, _ = mac.Write([]byte(input.Text))
 			return tool.Output{Text: hex.EncodeToString(mac.Sum(nil))}, nil
 		},

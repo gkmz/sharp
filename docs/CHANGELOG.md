@@ -63,4 +63,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - YAML to JSON now rejects multi-document YAML streams instead of silently converting only the first document.
 - JSON path queries now reject duplicate object keys instead of returning an ambiguous value.
 - URL parse now rejects network URL schemes such as `http` or `https` when no host is present.
+- HMAC tools now reject empty keys in the shared tool implementation, not only in CLI/TUI option parsing.
 - Added the missing `RTK.md` referenced by project agent instructions.

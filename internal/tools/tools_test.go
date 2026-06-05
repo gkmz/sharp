@@ -226,6 +226,20 @@ func TestCryptoTools(t *testing.T) {
 	}
 }
 
+func TestHMACRejectsEmptyKey(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("hmac.sha256")
+	if !ok {
+		t.Fatal("hmac.sha256 not registered")
+	}
+	for _, options := range []tool.Options{nil, {"key": ""}, {"key": "   "}} {
+		_, err := current.Run(context.Background(), tool.Input{Text: "hello"}, options)
+		if err == nil || !strings.Contains(err.Error(), "missing required option: key") {
+			t.Fatalf("hmac.sha256 error = %v, want missing key error", err)
+		}
+	}
+}
+
 func TestTimeTools(t *testing.T) {
 	out := runTool(t, "time.from", "1700000000", nil)
 	for _, want := range []string{"Unix seconds: 1700000000", "Unix milliseconds: 1700000000000"} {
