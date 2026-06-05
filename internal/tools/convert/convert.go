@@ -61,6 +61,9 @@ func Register(r *tool.Registry) {
 				return tool.Output{Text: "[]", MimeType: "application/json"}, nil
 			}
 			header := rows[0]
+			if err := validateCSVHeader(header); err != nil {
+				return tool.Output{}, err
+			}
 			var out []map[string]string
 			for _, row := range rows[1:] {
 				obj := map[string]string{}
@@ -107,6 +110,21 @@ func Register(r *tool.Registry) {
 			return tool.Output{Text: string(b), MimeType: "application/json"}, nil
 		},
 	})
+}
+
+func validateCSVHeader(header []string) error {
+	seen := map[string]bool{}
+	for i, name := range header {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return fmt.Errorf("CSV header %d is empty", i+1)
+		}
+		if seen[name] {
+			return fmt.Errorf("CSV header %q is duplicated", name)
+		}
+		seen[name] = true
+	}
+	return nil
 }
 
 func appendHeaderValue(out map[string]any, name string, value string) {

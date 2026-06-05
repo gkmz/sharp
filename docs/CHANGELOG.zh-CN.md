@@ -44,4 +44,5 @@
 - URL 解析支持 `example.com/path` 这类常见的无 scheme 主机输入。
 - URL 解析会保留 `mailto:` 等 opaque URL 的数据。
 - HTTP Header 转 JSON 会把重复 header 值保留为数组。
+- CSV 转 JSON 会拒绝空表头和重复表头，避免生成有歧义的输出。
 - 补充项目 Agent 规范引用的 `RTK.md`。

@@ -367,6 +367,29 @@ func TestConvertTools(t *testing.T) {
 	}
 }
 
+func TestCSVToJSONRejectsUnsafeHeaders(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{input: "a,a\n1,2\n", want: `CSV header "a" is duplicated`},
+		{input: "a,\n1,2\n", want: "CSV header 2 is empty"},
+	}
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("csv.to_json")
+	if !ok {
+		t.Fatal("csv.to_json not registered")
+	}
+	for _, tt := range cases {
+		t.Run(tt.want, func(t *testing.T) {
+			_, err := current.Run(context.Background(), tool.Input{Text: tt.input}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("csv.to_json error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestJWTDecode(t *testing.T) {
 	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoic2hhcnAiLCJpYXQiOjE3MDAwMDAwMDB9.signature"
 	out := runTool(t, "jwt.decode", token, nil)

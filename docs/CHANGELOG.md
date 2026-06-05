@@ -44,4 +44,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - URL parse now accepts common scheme-less host input such as `example.com/path`.
 - URL parse now preserves opaque URL data for schemes such as `mailto:`.
 - HTTP header conversion now preserves duplicate header values as arrays.
+- CSV to JSON now rejects empty or duplicated headers instead of producing ambiguous output.
 - Added the missing `RTK.md` referenced by project agent instructions.
