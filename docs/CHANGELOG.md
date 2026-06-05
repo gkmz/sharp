@@ -49,4 +49,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - Time timestamp conversion now detects seconds, milliseconds, and nanoseconds by digit count without treating signs as digits.
 - Time output now avoids undefined `UnixNano` overflow values for timestamps outside Go's native nanosecond range.
 - Base64 and hex decoders now ignore formatting whitespace from copied or wrapped encoded text.
+- CLI tools without options now accept double-dash-prefixed input such as `--hello` without requiring an extra `--` separator.
 - Added the missing `RTK.md` referenced by project agent instructions.

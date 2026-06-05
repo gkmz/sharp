@@ -90,6 +90,22 @@ func TestToolCommandAcceptsDashPrefixedInput(t *testing.T) {
 	}
 }
 
+func TestToolCommandAcceptsDoubleDashPrefixedInputWithoutOptions(t *testing.T) {
+	cmd := NewRootCommand(tools.NewRegistry())
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"hash", "sha256", "--hello"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	const want = "d53b07197ae503c756ef08a6bc88a4dbd7443092abf117e44fb4b50ff1826e6b"
+	if got := strings.TrimSpace(out.String()); got != want {
+		t.Fatalf("hash output = %q, want %q", got, want)
+	}
+}
+
 func TestToolCommandAcceptsNegativeInput(t *testing.T) {
 	cmd := NewRootCommand(tools.NewRegistry())
 	var out bytes.Buffer
@@ -125,7 +141,7 @@ func TestToolCommandRejectsUnknownLongOption(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"hash", "sha256", "--bad", "hello"})
+	cmd.SetArgs([]string{"json", "get", "--bad", "hello"})
 
 	err := cmd.Execute()
 	if err == nil {

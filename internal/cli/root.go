@@ -165,7 +165,7 @@ func parseToolCommandArgs(args []string, optionDefs []tool.Option) (tool.Options
 			inputArgs = append(inputArgs, args[i+1:]...)
 			break
 		}
-		if strings.HasPrefix(arg, "--") && len(arg) > 2 {
+		if len(known) > 0 && strings.HasPrefix(arg, "--") && len(arg) > 2 {
 			raw := strings.TrimPrefix(arg, "--")
 			name, value, hasValue := strings.Cut(raw, "=")
 			opt, ok := known[name]
