@@ -53,4 +53,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - TUI no-input tools now hide the `options` shortcut when the selected tool has no configurable options.
 - HTTP header conversion now canonicalizes case-insensitive header names before merging duplicate values.
 - JSON path queries now print `null` for existing null values instead of an empty line.
+- Lossy JSON transforms now reject duplicate object keys before sorting JSON or converting JSON to YAML.
 - Added the missing `RTK.md` referenced by project agent instructions.

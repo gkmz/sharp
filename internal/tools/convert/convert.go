@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gkmz/sharp/internal/tools/jsonutil"
 	"github.com/gkmz/sharp/pkg/tool"
 	"gopkg.in/yaml.v3"
 )
@@ -20,6 +21,9 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryConvert,
 		DescriptionValue: "Convert JSON to YAML.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
+			if err := jsonutil.RejectDuplicateObjectKeys(input.Text); err != nil {
+				return tool.Output{}, err
+			}
 			var v any
 			if err := json.Unmarshal([]byte(input.Text), &v); err != nil {
 				return tool.Output{}, err

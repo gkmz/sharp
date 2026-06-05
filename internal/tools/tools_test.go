@@ -123,6 +123,30 @@ func TestJSONTools(t *testing.T) {
 	}
 }
 
+func TestLossyJSONTransformsRejectDuplicateObjectKeys(t *testing.T) {
+	cases := []struct {
+		id    string
+		input string
+	}{
+		{id: "json.sort", input: `{"a":1,"a":2}`},
+		{id: "json.sort", input: `{"nested":{"a":1,"a":2}}`},
+		{id: "json.to_yaml", input: `{"a":1,"a":2}`},
+	}
+	registry := tools.NewRegistry()
+	for _, tt := range cases {
+		t.Run(tt.id, func(t *testing.T) {
+			current, ok := registry.Get(tt.id)
+			if !ok {
+				t.Fatalf("tool %q not registered", tt.id)
+			}
+			_, err := current.Run(context.Background(), tool.Input{Text: tt.input}, nil)
+			if err == nil || !strings.Contains(err.Error(), `duplicate JSON object key "a"`) {
+				t.Fatalf("%s error = %v, want duplicate key error", tt.id, err)
+			}
+		})
+	}
+}
+
 func TestEncodeTools(t *testing.T) {
 	pairs := []struct {
 		encodeID string

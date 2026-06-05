@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/gkmz/sharp/internal/tools/jsonutil"
 	"github.com/gkmz/sharp/pkg/tool"
 	"github.com/tidwall/gjson"
 )
@@ -92,6 +93,9 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryJSON,
 		DescriptionValue: "Sort JSON object keys recursively.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
+			if err := jsonutil.RejectDuplicateObjectKeys(input.Text); err != nil {
+				return tool.Output{}, err
+			}
 			var v any
 			if err := json.Unmarshal([]byte(input.Text), &v); err != nil {
 				return tool.Output{}, fmt.Errorf("invalid JSON: %w", err)

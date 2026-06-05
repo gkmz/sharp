@@ -53,4 +53,5 @@
 - TUI 中无输入工具如果没有可配置参数，现在不会再显示不可用的 `options` 快捷键。
 - HTTP Header 转 JSON 现在会先规范化大小写不敏感的 header 名，再合并重复值。
 - JSON 路径查询现在会把已存在的 null 值输出为 `null`，不再显示为空行。
+- 有损 JSON 转换现在会在排序 JSON 或 JSON 转 YAML 前拒绝重复对象 key。
 - 补充项目 Agent 规范引用的 `RTK.md`。
