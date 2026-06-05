@@ -513,6 +513,32 @@ func TestJWTDecodeRejectsNonJSONParts(t *testing.T) {
 	}
 }
 
+func TestJWTDecodeRejectsNonObjectParts(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("jwt.decode")
+	if !ok {
+		t.Fatal("jwt.decode not registered")
+	}
+	encode := base64.RawURLEncoding.EncodeToString
+	cases := []struct {
+		name  string
+		token string
+		want  string
+	}{
+		{name: "header string", token: encode([]byte(`"str"`)) + "." + encode([]byte(`{"a":1}`)) + ".sig", want: "invalid header: part must be a JSON object"},
+		{name: "payload array", token: encode([]byte(`{"alg":"none"}`)) + "." + encode([]byte(`[]`)) + ".sig", want: "invalid payload: part must be a JSON object"},
+		{name: "duplicate header key", token: encode([]byte(`{"a":1,"a":2}`)) + "." + encode([]byte(`{"a":1}`)) + ".sig", want: `invalid header: duplicate JSON object key "a"`},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := current.Run(context.Background(), tool.Input{Text: tt.token}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("jwt.decode error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestInvalidInputsReturnErrors(t *testing.T) {
 	cases := []struct {
 		id      string

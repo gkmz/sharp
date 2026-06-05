@@ -55,4 +55,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - JSON path queries now print `null` for existing null values instead of an empty line.
 - Lossy JSON transforms now reject duplicate object keys before sorting JSON or converting JSON to YAML.
 - JWT decode now emits a valid JSON object so its output can be chained into JSON tools.
+- JWT decode now rejects header or payload parts that are not JSON objects, including duplicate object keys.
 - Added the missing `RTK.md` referenced by project agent instructions.

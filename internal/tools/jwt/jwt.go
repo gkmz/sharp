@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gkmz/sharp/internal/tools/jsonutil"
 	"github.com/gkmz/sharp/pkg/tool"
 )
 
@@ -57,5 +58,22 @@ func decodePart(s string) (json.RawMessage, error) {
 	if !json.Valid(b) {
 		return nil, fmt.Errorf("part must be JSON")
 	}
+	if err := jsonutil.RejectDuplicateObjectKeys(string(b)); err != nil {
+		return nil, err
+	}
+	if !isJSONObject(b) {
+		return nil, fmt.Errorf("part must be a JSON object")
+	}
 	return json.RawMessage(b), nil
+}
+
+func isJSONObject(b []byte) bool {
+	for _, c := range b {
+		if c == ' ' || c == '\n' || c == '\r' || c == '\t' {
+			continue
+		}
+		// JWT header 和 claims set 都是 JSON object；数组、字符串等虽然是 JSON，但不是合法 JWT 结构。
+		return c == '{'
+	}
+	return false
 }
