@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/gkmz/sharp/pkg/tool"
@@ -88,6 +89,7 @@ func Register(r *tool.Registry) {
 		DescriptionValue: "Convert HTTP headers to JSON.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
 			out := map[string]any{}
+			canonicalNames := map[string]string{}
 			for _, line := range strings.Split(input.Text, "\n") {
 				if strings.TrimSpace(line) == "" {
 					continue
@@ -101,6 +103,7 @@ func Register(r *tool.Registry) {
 				if name == "" {
 					return tool.Output{}, fmt.Errorf("header name cannot be empty")
 				}
+				name = canonicalHeaderName(name, canonicalNames)
 				appendHeaderValue(out, name, value)
 			}
 			b, err := json.MarshalIndent(out, "", "  ")
@@ -125,6 +128,17 @@ func validateCSVHeader(header []string) error {
 		seen[name] = true
 	}
 	return nil
+}
+
+func canonicalHeaderName(name string, seen map[string]string) string {
+	key := strings.ToLower(name)
+	if existing, ok := seen[key]; ok {
+		return existing
+	}
+	// HTTP header 名大小写不敏感；输出使用标准 Canonical 形式，避免同名 header 被拆成多个 JSON 字段。
+	canonical := http.CanonicalHeaderKey(name)
+	seen[key] = canonical
+	return canonical
 }
 
 func appendHeaderValue(out map[string]any, name string, value string) {

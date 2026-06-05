@@ -51,4 +51,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - Base64 and hex decoders now ignore formatting whitespace from copied or wrapped encoded text.
 - CLI tools without options now accept double-dash-prefixed input such as `--hello` without requiring an extra `--` separator.
 - TUI no-input tools now hide the `options` shortcut when the selected tool has no configurable options.
+- HTTP header conversion now canonicalizes case-insensitive header names before merging duplicate values.
 - Added the missing `RTK.md` referenced by project agent instructions.

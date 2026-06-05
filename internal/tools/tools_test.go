@@ -410,6 +410,14 @@ func TestConvertTools(t *testing.T) {
 	if !strings.Contains(out.Text, `"Set-Cookie": [`) || !strings.Contains(out.Text, `"a"`) || !strings.Contains(out.Text, `"b"`) {
 		t.Fatalf("headers.to_json output = %q, want duplicate headers preserved as array", out.Text)
 	}
+
+	out = runTool(t, "headers.to_json", "content-type: application/json\nContent-Type: text/plain\nX-Test: a\nx-test: b", nil)
+	if !strings.Contains(out.Text, `"Content-Type": [`) || strings.Contains(out.Text, `"content-type"`) {
+		t.Fatalf("headers.to_json output = %q, want canonical content-type array", out.Text)
+	}
+	if !strings.Contains(out.Text, `"X-Test": [`) || strings.Contains(out.Text, `"x-test"`) {
+		t.Fatalf("headers.to_json output = %q, want canonical x-test array", out.Text)
+	}
 }
 
 func TestCSVToJSONRejectsUnsafeHeaders(t *testing.T) {
