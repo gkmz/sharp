@@ -71,6 +71,10 @@ The TUI is organized into four numbered regions:
 | `3 Tools` | Select tools in the current subcategory. JSON uses one Workspace page. |
 | `4 Workspace` | Work with input, options/path, actions, and output. |
 
+Tool options in the TUI use `key=value` pairs. Wrap values that contain spaces
+in quotes, for example `replacement="hello world"`. Secret options, such as
+HMAC keys, are masked in the normal workspace view.
+
 Common shortcuts:
 
 | Key | Action |

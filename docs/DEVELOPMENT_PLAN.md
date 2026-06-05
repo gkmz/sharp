@@ -91,8 +91,8 @@ CLI examples:
 sharp json pretty file.json
 sharp json minify file.json
 sharp json validate file.json
-sharp json get file.json data.user.name
-echo '{"data":{"id":1}}' | sharp json get data.id
+sharp json get --path data.user.name file.json
+echo '{"data":{"id":1}}' | sharp json get --path data.id
 ```
 
 Acceptance criteria:
@@ -120,7 +120,7 @@ CLI examples:
 ```bash
 sharp b64 encode "hello"
 sharp b64 decode "aGVsbG8="
-sharp b64 encode --url "hello?"
+sharp b64url encode "hello?"
 sharp url encode "a=b&c=d"
 sharp url decode "a%3Db%26c%3Dd"
 ```
@@ -180,9 +180,9 @@ Tasks:
 CLI examples:
 
 ```bash
-sharp uuid
+sharp uuid v4
 sharp password --length 24
-sharp token --bytes 32 --encoding base64url
+sharp token --bytes 32
 ```
 
 Acceptance criteria:
@@ -221,14 +221,13 @@ Goal: make `sharp` more powerful than standalone web utilities.
 Tasks:
 
 - Add pipe action in TUI.
-- Add tool selector for next step.
-- Pass current output as next tool input.
-- Track current chain in memory.
-- Add recent chains list.
+- Pass current output back into the current tool input.
+- Keep chaining in memory only and do not persist sensitive input.
+- Future versions may add a next-tool selector and recent chain list.
 
 Acceptance criteria:
 
-- User can run `Base64 decode -> JSON pretty -> JSON get` inside TUI.
+- User can manually run `Base64 decode -> apply output as input -> JSON pretty -> JSON get` by switching tools and pasting or piping output.
 - CLI chaining works naturally through stdout/stdin.
 - Chaining does not persist sensitive input by default.
 
@@ -378,4 +377,3 @@ Implement Milestone 0:
 - Add shared tool registry.
 - Add one sample tool.
 - Verify with `go test ./...` and `go run ./cmd/sharp --help`.
-

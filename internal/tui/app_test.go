@@ -127,6 +127,95 @@ func TestGenericToolPageShowsOptionsWithoutInput(t *testing.T) {
 	}
 }
 
+func TestGenericToolPageValidatesRequiredOptions(t *testing.T) {
+	page := newGenericToolPage(tool.SimpleTool{
+		IDValue:          "hmac.test",
+		NameValue:        "HMAC Test",
+		CategoryValue:    tool.CategoryCrypto,
+		DescriptionValue: "test required option",
+		OptionsValue:     []tool.Option{{Name: "key", Description: "secret", Required: true}},
+		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
+			t.Fatal("RunFunc should not be called when required option is empty")
+			return tool.Output{}, nil
+		},
+	})
+	page.optionBox.SetValue("key=")
+	page.Run()
+
+	if got := page.OutputText(); !strings.Contains(got, "missing required option: key") {
+		t.Fatalf("OutputText() = %q, want missing required option error", got)
+	}
+	if !page.outputErr {
+		t.Fatal("outputErr = false, want true")
+	}
+}
+
+func TestGenericToolPageParsesQuotedOptionValues(t *testing.T) {
+	page := newGenericToolPage(tool.SimpleTool{
+		IDValue:          "regex.replace",
+		NameValue:        "Regex Replace",
+		CategoryValue:    tool.CategoryText,
+		DescriptionValue: "replace",
+		OptionsValue: []tool.Option{
+			{Name: "pattern", Description: "Regular expression", Required: true},
+			{Name: "replacement", Description: "Replacement text"},
+		},
+		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
+			return tool.Output{Text: options["replacement"]}, nil
+		},
+	})
+	page.optionBox.SetValue(`pattern=\d+ replacement="hello world"`)
+	page.Run()
+
+	if got, want := page.OutputText(), "hello world"; got != want {
+		t.Fatalf("OutputText() = %q, want %q", got, want)
+	}
+}
+
+func TestGenericToolPageRejectsUnknownOptions(t *testing.T) {
+	page := newGenericToolPage(tool.SimpleTool{
+		IDValue:          "password",
+		NameValue:        "Random Password",
+		CategoryValue:    tool.CategoryGenerator,
+		DescriptionValue: "generate password",
+		OptionsValue:     []tool.Option{{Name: "length", Description: "Password length", Default: "24"}},
+		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
+			t.Fatal("RunFunc should not be called when an unknown option is present")
+			return tool.Output{}, nil
+		},
+	})
+	page.optionBox.SetValue("length=12 typo=1")
+	page.Run()
+
+	if got := page.OutputText(); !strings.Contains(got, "unknown option: typo") {
+		t.Fatalf("OutputText() = %q, want unknown option error", got)
+	}
+}
+
+func TestGenericToolPageMasksSecretOptionsInNormalView(t *testing.T) {
+	page := newGenericToolPage(tool.SimpleTool{
+		IDValue:          "hmac.test",
+		NameValue:        "HMAC Test",
+		CategoryValue:    tool.CategoryCrypto,
+		DescriptionValue: "test secret option",
+		OptionsValue:     []tool.Option{{Name: "key", Description: "secret", Required: true, Secret: true}},
+		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
+			return tool.Output{Text: options["key"]}, nil
+		},
+	})
+	page.optionBox.SetValue("key=secret")
+	page.SetSize(60, 14)
+	page.Run()
+
+	view := stripANSI(page.View())
+	if strings.Contains(view, "key=secret") {
+		t.Fatalf("View() = %q, should not expose secret option value", view)
+	}
+	if !strings.Contains(view, "key=<secret>") {
+		t.Fatalf("View() = %q, want masked secret option", view)
+	}
+}
+
 func TestWrapDisplayTextUsesTerminalWidth(t *testing.T) {
 	if got, want := wrapDisplayText("中文abcd", 4), "中文\nabcd"; got != want {
 		t.Fatalf("wrapDisplayText() = %q, want %q", got, want)

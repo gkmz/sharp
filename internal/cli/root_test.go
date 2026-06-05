@@ -54,3 +54,22 @@ func TestVersionCommand(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimeErrorsDoNotPrintUsage(t *testing.T) {
+	cmd := NewRootCommand(tools.NewRegistry())
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"password", "--length", "abc"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("Execute() returned nil error, want invalid length error")
+	}
+	if got := err.Error(); got != "length must be an integer" {
+		t.Fatalf("error = %q, want invalid length message", got)
+	}
+	if got := out.String(); strings.Contains(got, "Usage:") || strings.Contains(got, "Error:") {
+		t.Fatalf("output = %q, should not include cobra usage or duplicate error", got)
+	}
+}

@@ -113,10 +113,20 @@ func textTool(r *tool.Registry, id string, name string, description string, fn f
 }
 
 func words(s string) []string {
-	re := regexp.MustCompile(`[A-Za-z0-9]+`)
-	parts := re.FindAllString(s, -1)
-	for i := range parts {
-		parts[i] = strings.ToLower(parts[i])
+	parts := make([]string, 0)
+	var current strings.Builder
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			current.WriteRune(unicode.ToLower(r))
+			continue
+		}
+		if current.Len() > 0 {
+			parts = append(parts, current.String())
+			current.Reset()
+		}
+	}
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
 	}
 	return parts
 }

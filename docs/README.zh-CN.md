@@ -71,6 +71,9 @@ TUI 分为四个带数字快捷键的区域：
 | `3 Tools` | 选择当前子类目下的工具。JSON 类目使用单一 Workspace 页面。 |
 | `4 Workspace` | 处理输入、参数/路径、动作和输出。 |
 
+TUI 参数使用 `key=value` 格式。包含空格的值需要加引号，例如
+`replacement="hello world"`。HMAC key 这类敏感参数会在普通工作区视图中遮蔽显示。
+
 常用快捷键：
 
 | 快捷键 | 动作 |

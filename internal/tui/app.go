@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -1431,6 +1432,11 @@ func newGenericToolPage(t tool.Tool) *genericToolPage {
 
 	optionBox := textinput.New()
 	optionBox.Placeholder = "option=value option2=value2"
+	if hasSecretOptions(t.Options()) {
+		// Secret 参数所在的整行使用密码模式，避免 HMAC key 等值在编辑时直接暴露。
+		optionBox.EchoMode = textinput.EchoPassword
+		optionBox.EchoCharacter = '*'
+	}
 	optionBox.Blur()
 
 	output := viewport.New(80, 12)
@@ -1536,7 +1542,7 @@ func (p *genericToolPage) View() string {
 		if p.focus == pageFocusOptions || p.editing {
 			b.WriteString(p.optionBox.View() + "\n")
 		} else {
-			b.WriteString(dimStyle.Render(p.optionBox.Value()) + "\n")
+			b.WriteString(dimStyle.Render(p.optionSummary()) + "\n")
 		}
 		for _, opt := range p.tool.Options() {
 			req := ""
@@ -1667,7 +1673,13 @@ func (p *genericToolPage) InputHalfPageUp() {
 
 // Run executes the selected tool with current input and parsed options.
 func (p *genericToolPage) Run() {
-	p.parseOptions()
+	if err := p.parseOptions(); err != nil {
+		p.outputText = err.Error()
+		p.outputErr = true
+		p.renderOutput()
+		p.status = errorStyle.Render("invalid options: " + p.tool.ID())
+		return
+	}
 	out, err := p.tool.Run(context.Background(), tool.Input{Text: p.input.Value()}, p.options)
 	if err != nil {
 		p.outputText = err.Error()
@@ -1857,17 +1869,88 @@ func (p *genericToolPage) loadSelectedOptions() {
 		parts = append(parts, fmt.Sprintf("%s=%s", opt.Name, value))
 	}
 	p.optionBox.SetValue(strings.Join(parts, " "))
-	p.parseOptions()
+	_ = p.parseOptions()
 }
 
-func (p *genericToolPage) parseOptions() {
-	p.options = tool.Options{}
-	for _, part := range strings.Fields(p.optionBox.Value()) {
-		k, v, ok := strings.Cut(part, "=")
-		if ok {
-			p.options[k] = v
+func (p *genericToolPage) optionSummary() string {
+	parts := make([]string, 0, len(p.tool.Options()))
+	for _, opt := range p.tool.Options() {
+		value := p.options[opt.Name]
+		if opt.Secret {
+			if strings.TrimSpace(value) == "" {
+				value = ""
+			} else {
+				value = "<secret>"
+			}
+		}
+		parts = append(parts, fmt.Sprintf("%s=%s", opt.Name, value))
+	}
+	return strings.Join(parts, " ")
+}
+
+func (p *genericToolPage) parseOptions() error {
+	options, err := parseOptionText(p.optionBox.Value(), p.tool.Options())
+	if err != nil {
+		return err
+	}
+	p.options = options
+	return nil
+}
+
+func parseOptionText(text string, specs []tool.Option) (tool.Options, error) {
+	options := tool.Options{}
+	allowed := make(map[string]bool, len(specs))
+	for _, opt := range specs {
+		allowed[opt.Name] = true
+		if opt.Default != "" {
+			options[opt.Name] = opt.Default
 		}
 	}
+
+	// TUI 使用轻量 key=value 语法；带空格的值必须加引号，例如 replacement="hello world"。
+	for _, part := range optionPattern.FindAllString(text, -1) {
+		k, v, ok := strings.Cut(part, "=")
+		if !ok {
+			return nil, fmt.Errorf("invalid option %q, expected key=value", part)
+		}
+		k = strings.TrimSpace(k)
+		if k == "" {
+			return nil, fmt.Errorf("option name cannot be empty")
+		}
+		if !allowed[k] {
+			return nil, fmt.Errorf("unknown option: %s", k)
+		}
+		options[k] = unquoteOptionValue(strings.TrimSpace(v))
+	}
+
+	// 和 CLI 保持一致：必填项缺失时阻止运行工具，把错误显示在输出区域。
+	for _, opt := range specs {
+		if opt.Required && strings.TrimSpace(options[opt.Name]) == "" {
+			return nil, fmt.Errorf("missing required option: %s", opt.Name)
+		}
+	}
+	return options, nil
+}
+
+var optionPattern = regexp.MustCompile(`\S+="[^"]*"|\S+='[^']*'|\S+`)
+
+func unquoteOptionValue(value string) string {
+	if len(value) < 2 {
+		return value
+	}
+	if (value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'') {
+		return value[1 : len(value)-1]
+	}
+	return value
+}
+
+func hasSecretOptions(options []tool.Option) bool {
+	for _, opt := range options {
+		if opt.Secret {
+			return true
+		}
+	}
+	return false
 }
 
 func toolUsesInput(t tool.Tool) bool {

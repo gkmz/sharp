@@ -204,6 +204,30 @@ func TestGeneratorTools(t *testing.T) {
 	}
 }
 
+func TestGeneratorInvalidOptionsReturnErrors(t *testing.T) {
+	cases := []struct {
+		id      string
+		options tool.Options
+	}{
+		{id: "password", options: tool.Options{"length": "abc"}},
+		{id: "password", options: tool.Options{"length": "0"}},
+		{id: "token", options: tool.Options{"bytes": "abc"}},
+		{id: "token", options: tool.Options{"bytes": "-1"}},
+	}
+	registry := tools.NewRegistry()
+	for _, tt := range cases {
+		t.Run(tt.id+" invalid option", func(t *testing.T) {
+			current, ok := registry.Get(tt.id)
+			if !ok {
+				t.Fatalf("tool %q not registered", tt.id)
+			}
+			if _, err := current.Run(context.Background(), tool.Input{}, tt.options); err == nil {
+				t.Fatalf("%s returned nil error for options %#v", tt.id, tt.options)
+			}
+		})
+	}
+}
+
 func TestTextTools(t *testing.T) {
 	cases := []struct {
 		id      string
@@ -218,6 +242,9 @@ func TestTextTools(t *testing.T) {
 		{id: "text.kebab", input: "Hello world", want: "hello-world"},
 		{id: "text.camel", input: "hello world", want: "helloWorld"},
 		{id: "text.pascal", input: "hello world", want: "HelloWorld"},
+		{id: "text.snake", input: "用户 Name Café", want: "用户_name_café"},
+		{id: "text.kebab", input: "用户 Name Café", want: "用户-name-café"},
+		{id: "text.camel", input: "用户 name café", want: "用户NameCafé"},
 		{id: "text.sort", input: "b\na", want: "a\nb"},
 		{id: "text.uniq", input: "a\nb\na", want: "a\nb"},
 		{id: "regex.test", input: "abc 123", options: tool.Options{"pattern": `\d+`}, want: "123"},

@@ -38,6 +38,9 @@ func NewRootCommand(registry *tool.Registry) *cobra.Command {
 		Use:   "sharp",
 		Short: "Interactive terminal toolkit for developers",
 		Long:  logo + "\n\nsharp is a keyboard-first developer toolkit for JSON, encoding, crypto, time, text, network, conversion, JWT inspection, and generators.",
+		// 运行期错误由 main 统一打印一次，避免脚本里出现 Cobra usage 和重复错误文本。
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return tui.Run(registry)
@@ -144,6 +147,7 @@ func resolveInput(cmd *cobra.Command, args []string) (string, error) {
 	if len(args) > 0 {
 		candidate := strings.Join(args, " ")
 		if len(args) == 1 {
+			// 单个参数优先按文件路径解析；多个参数保持为用户输入文本，适合 `sharp hash sha256 hello world`。
 			if info, err := os.Stat(args[0]); err == nil && !info.IsDir() {
 				b, err := os.ReadFile(args[0])
 				if err != nil {
@@ -163,6 +167,7 @@ func resolveInput(cmd *cobra.Command, args []string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// 只去掉 shell 管道常见的单个尾随换行，保留用户输入主体中的空白和换行。
 		return strings.TrimSuffix(string(b), "\n"), nil
 	}
 	return "", nil

@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math/big"
+	"strconv"
+	"strings"
 
 	"github.com/gkmz/sharp/pkg/tool"
 	"github.com/google/uuid"
@@ -35,7 +37,10 @@ func Register(r *tool.Registry) {
 			Default:     "24",
 		}},
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			length := intOption(options, "length", 24)
+			length, err := intOption(options, "length", 24)
+			if err != nil {
+				return tool.Output{}, err
+			}
 			if length < 1 || length > 4096 {
 				return tool.Output{}, fmt.Errorf("length must be between 1 and 4096")
 			}
@@ -57,7 +62,10 @@ func Register(r *tool.Registry) {
 			Default:     "32",
 		}},
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			n := intOption(options, "bytes", 32)
+			n, err := intOption(options, "bytes", 32)
+			if err != nil {
+				return tool.Output{}, err
+			}
 			if n < 1 || n > 4096 {
 				return tool.Output{}, fmt.Errorf("bytes must be between 1 and 4096")
 			}
@@ -70,18 +78,24 @@ func Register(r *tool.Registry) {
 	})
 }
 
-func intOption(options tool.Options, key string, fallback int) int {
-	var n int
-	if _, err := fmt.Sscanf(options[key], "%d", &n); err != nil || n == 0 {
-		return fallback
+func intOption(options tool.Options, key string, fallback int) (int, error) {
+	value := strings.TrimSpace(options[key])
+	if value == "" {
+		return fallback, nil
 	}
-	return n
+	// 生成类工具会进入脚本流水线；非法参数必须失败，不能静默回退默认值。
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer", key)
+	}
+	return n, nil
 }
 
 func randomString(length int, chars string) (string, error) {
 	out := make([]byte, length)
 	max := big.NewInt(int64(len(chars)))
 	for i := range out {
+		// 密码/token 相关随机性只使用 crypto/rand，避免误用 math/rand 带来的可预测输出。
 		n, err := rand.Int(rand.Reader, max)
 		if err != nil {
 			return "", err
