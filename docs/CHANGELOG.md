@@ -64,4 +64,5 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - JSON path queries now reject duplicate object keys instead of returning an ambiguous value.
 - URL parse now rejects network URL schemes such as `http` or `https` when no host is present.
 - HMAC tools now reject empty keys in the shared tool implementation, not only in CLI/TUI option parsing.
+- CSV to JSON now trims header names before using them as JSON object keys.
 - Added the missing `RTK.md` referenced by project agent instructions.

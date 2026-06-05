@@ -568,6 +568,20 @@ func TestCSVToJSONRejectsUnsafeHeaders(t *testing.T) {
 	}
 }
 
+func TestCSVToJSONTrimsHeaderNames(t *testing.T) {
+	out := runTool(t, "csv.to_json", " name , age \nsharp,1\n", nil)
+	var got []map[string]string
+	if err := json.Unmarshal([]byte(out.Text), &got); err != nil {
+		t.Fatalf("csv.to_json output = %q, want valid JSON: %v", out.Text, err)
+	}
+	if len(got) != 1 || got[0]["name"] != "sharp" || got[0]["age"] != "1" {
+		t.Fatalf("csv.to_json output = %q, want trimmed header names", out.Text)
+	}
+	if _, ok := got[0][" name "]; ok {
+		t.Fatalf("csv.to_json output = %q, should not keep untrimmed header name", out.Text)
+	}
+}
+
 func TestJWTDecode(t *testing.T) {
 	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoic2hhcnAiLCJpYXQiOjE3MDAwMDAwMDB9.signature"
 	out := runTool(t, "jwt.decode", token, nil)

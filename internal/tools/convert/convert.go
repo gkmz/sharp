@@ -70,8 +70,8 @@ func Register(r *tool.Registry) {
 			if len(rows) == 0 {
 				return tool.Output{Text: "[]", MimeType: "application/json"}, nil
 			}
-			header := rows[0]
-			if err := validateCSVHeader(header); err != nil {
+			header, err := normalizeCSVHeader(rows[0])
+			if err != nil {
 				return tool.Output{}, err
 			}
 			var out []map[string]string
@@ -245,19 +245,21 @@ func yamlNodeTypeName(n *yaml.Node) string {
 	}
 }
 
-func validateCSVHeader(header []string) error {
+func normalizeCSVHeader(header []string) ([]string, error) {
 	seen := map[string]bool{}
+	normalized := make([]string, len(header))
 	for i, name := range header {
 		name = strings.TrimSpace(name)
 		if name == "" {
-			return fmt.Errorf("CSV header %d is empty", i+1)
+			return nil, fmt.Errorf("CSV header %d is empty", i+1)
 		}
 		if seen[name] {
-			return fmt.Errorf("CSV header %q is duplicated", name)
+			return nil, fmt.Errorf("CSV header %q is duplicated", name)
 		}
 		seen[name] = true
+		normalized[i] = name
 	}
-	return nil
+	return normalized, nil
 }
 
 func canonicalHeaderName(name string, seen map[string]string) string {
