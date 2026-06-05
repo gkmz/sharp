@@ -38,4 +38,6 @@
 - TUI 参数值支持带引号的空格内容，例如 `replacement="hello world"`。
 - 敏感参数会在 TUI 普通工作区视图中遮蔽显示。
 - 文本命名风格转换会保留 Unicode 字母和数字，不再丢弃非 ASCII 词。
+- JWT 解码会拒绝缺段或多段 token，不再接受非标准形态。
+- Network 解析类工具遇到空输入或仅路径输入时会返回清晰错误。
 - 补充项目 Agent 规范引用的 `RTK.md`。

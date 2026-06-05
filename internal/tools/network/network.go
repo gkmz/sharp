@@ -20,9 +20,16 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryNetwork,
 		DescriptionValue: "Parse a URL into structured parts.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			u, err := url.Parse(strings.TrimSpace(input.Text))
+			raw := strings.TrimSpace(input.Text)
+			if raw == "" {
+				return tool.Output{}, fmt.Errorf("URL is required")
+			}
+			u, err := url.Parse(raw)
 			if err != nil {
 				return tool.Output{}, err
+			}
+			if u.Scheme == "" && u.Host == "" {
+				return tool.Output{}, fmt.Errorf("URL must include a scheme or host")
 			}
 			data := map[string]any{
 				"scheme":   u.Scheme,
@@ -45,7 +52,11 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryNetwork,
 		DescriptionValue: "Parse URL query string as JSON.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			values, err := url.ParseQuery(strings.TrimPrefix(strings.TrimSpace(input.Text), "?"))
+			raw := strings.TrimPrefix(strings.TrimSpace(input.Text), "?")
+			if raw == "" {
+				return tool.Output{}, fmt.Errorf("query string is required")
+			}
+			values, err := url.ParseQuery(raw)
 			if err != nil {
 				return tool.Output{}, err
 			}
@@ -63,6 +74,9 @@ func Register(r *tool.Registry) {
 		DescriptionValue: "Resolve host IP addresses.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
 			host := strings.TrimSpace(input.Text)
+			if host == "" {
+				return tool.Output{}, fmt.Errorf("host is required")
+			}
 			ips, err := net.LookupHost(host)
 			if err != nil {
 				return tool.Output{}, err
@@ -77,7 +91,11 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryNetwork,
 		DescriptionValue: "Parse CIDR notation.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			ip, network, err := net.ParseCIDR(strings.TrimSpace(input.Text))
+			raw := strings.TrimSpace(input.Text)
+			if raw == "" {
+				return tool.Output{}, fmt.Errorf("CIDR is required")
+			}
+			ip, network, err := net.ParseCIDR(raw)
 			if err != nil {
 				return tool.Output{}, err
 			}

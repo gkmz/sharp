@@ -38,4 +38,6 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - TUI option values can contain spaces when quoted, for example `replacement="hello world"`.
 - Secret options are masked in the normal TUI workspace view.
 - Text case conversion now preserves Unicode letters and digits instead of dropping non-ASCII words.
+- JWT decode now rejects malformed token shapes instead of accepting partial or extra segments.
+- Network parsers now return clear errors for empty or path-only input.
 - Added the missing `RTK.md` referenced by project agent instructions.

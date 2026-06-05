@@ -290,6 +290,33 @@ func TestNetworkTools(t *testing.T) {
 	}
 }
 
+func TestNetworkEmptyInputsReturnActionableErrors(t *testing.T) {
+	cases := []struct {
+		id    string
+		input string
+		want  string
+	}{
+		{id: "url.parse", input: "", want: "URL is required"},
+		{id: "url.parse", input: "just-a-path", want: "URL must include a scheme or host"},
+		{id: "query.parse", input: "?", want: "query string is required"},
+		{id: "dns.lookup", input: "", want: "host is required"},
+		{id: "cidr.parse", input: "", want: "CIDR is required"},
+	}
+	registry := tools.NewRegistry()
+	for _, tt := range cases {
+		t.Run(tt.id+" empty input", func(t *testing.T) {
+			current, ok := registry.Get(tt.id)
+			if !ok {
+				t.Fatalf("tool %q not registered", tt.id)
+			}
+			_, err := current.Run(context.Background(), tool.Input{Text: tt.input}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("%s error = %v, want %q", tt.id, err, tt.want)
+			}
+		})
+	}
+}
+
 func TestConvertTools(t *testing.T) {
 	out := runTool(t, "json.to_yaml", `{"name":"sharp"}`, nil)
 	if !strings.Contains(out.Text, "name: sharp") || out.MimeType != "application/yaml" {
@@ -317,6 +344,21 @@ func TestJWTDecode(t *testing.T) {
 	out := runTool(t, "jwt.decode", token, nil)
 	if !strings.Contains(out.Text, `"alg": "HS256"`) || !strings.Contains(out.Text, `"name": "sharp"`) {
 		t.Fatalf("jwt.decode output = %q, want decoded header and payload", out.Text)
+	}
+}
+
+func TestJWTDecodeRejectsMalformedTokenShape(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("jwt.decode")
+	if !ok {
+		t.Fatal("jwt.decode not registered")
+	}
+	for _, input := range []string{"header.payload", "header.payload.signature.extra", ".payload.signature"} {
+		t.Run(input, func(t *testing.T) {
+			if _, err := current.Run(context.Background(), tool.Input{Text: input}, nil); err == nil {
+				t.Fatalf("jwt.decode returned nil error for malformed token %q", input)
+			}
+		})
 	}
 }
 

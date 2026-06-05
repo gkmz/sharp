@@ -20,8 +20,8 @@ func Register(r *tool.Registry) {
 		DescriptionValue: "Decode JWT header and payload without verifying signature.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
 			parts := strings.Split(strings.TrimSpace(input.Text), ".")
-			if len(parts) < 2 {
-				return tool.Output{}, fmt.Errorf("JWT must contain at least header and payload")
+			if len(parts) != 3 {
+				return tool.Output{}, fmt.Errorf("JWT must contain exactly 3 dot-separated parts")
 			}
 			header, err := decodePart(parts[0])
 			if err != nil {
@@ -37,6 +37,9 @@ func Register(r *tool.Registry) {
 }
 
 func decodePart(s string) (string, error) {
+	if strings.TrimSpace(s) == "" {
+		return "", fmt.Errorf("part is empty")
+	}
 	b, err := base64.RawURLEncoding.DecodeString(s)
 	if err != nil {
 		return "", err
