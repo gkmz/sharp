@@ -89,8 +89,8 @@ func TestGenericToolPageHidesInputForGenerators(t *testing.T) {
 	if strings.Contains(view, "Input") {
 		t.Fatalf("View() = %q, should hide Input for uuid generator", view)
 	}
-	if !strings.Contains(view, "Actions") || !strings.Contains(view, "Output") {
-		t.Fatalf("View() = %q, want Actions and Output blocks", view)
+	if !strings.Contains(view, "Output") || strings.Contains(view, "Actions") {
+		t.Fatalf("View() = %q, want Output without a duplicate Actions block", view)
 	}
 
 	page.SetInput("ignored")
@@ -238,20 +238,21 @@ func TestJSONToolPageCanChainActionsWithApplyAndUndo(t *testing.T) {
 	}
 	page.SetInput(`{"b":2,"a":1}`)
 
-	if !page.HandleKey("p") {
-		t.Fatal("pretty action was not handled")
-	}
+	page.selectedAction = "json.pretty"
+	page.Run()
 	if got, want := page.OutputText(), "{\n  \"b\": 2,\n  \"a\": 1\n}"; got != want {
 		t.Fatalf("pretty output = %q, want %q", got, want)
 	}
 
-	page.HandleKey("m")
+	page.selectedAction = "json.minify"
+	page.Run()
 	page.HandleKey("a")
 	if got, want := page.input.Value(), `{"b":2,"a":1}`; got != want {
 		t.Fatalf("input after apply = %q, want %q", got, want)
 	}
 
-	page.HandleKey("e")
+	page.selectedAction = "json.escape"
+	page.Run()
 	if got, want := page.OutputText(), `"{\"b\":2,\"a\":1}"`; got != want {
 		t.Fatalf("escape output = %q, want %q", got, want)
 	}
@@ -276,29 +277,23 @@ func TestJSONToolPageDoesNotClaimPasteShortcut(t *testing.T) {
 	if page.HandleKey("v") {
 		t.Fatal("JSON page should not claim v; v is reserved for paste")
 	}
-	if !page.HandleKey("c") {
-		t.Fatal("JSON page should claim c for validate/check")
+	for _, key := range []string{"p", "s", "c"} {
+		if page.HandleKey(key) {
+			t.Fatalf("JSON should not override shared/action selection key %s", key)
+		}
 	}
 }
 
-func TestJSONTabsRenderPagesNotAtomicTools(t *testing.T) {
-	registry := tools.NewRegistry()
-	model := newModel(registry)
-	for i, c := range model.categories {
-		if c.Category == tool.CategoryJSON {
-			model.selectedCat = i
-			break
+func TestJSONTabsRenderVisibleActions(t *testing.T) {
+	m := workflowModel(tool.CategoryJSON)
+	view := stripANSI(m.tabsView(100, 3))
+	for _, want := range []string{"Pretty", "Minify", "Sort", "Query", "Escape", "Unescape", "Check"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("JSON actions %q missing %q", view, want)
 		}
 	}
-
-	view := model.tabsView(80, 3)
-	if !strings.Contains(view, "Workspace") {
-		t.Fatalf("JSON tabsView() = %q, want workspace page", view)
-	}
-	for _, unwanted := range []string{"Actions", "Raw Tools", "Pretty JSON"} {
-		if strings.Contains(view, unwanted) {
-			t.Fatalf("JSON tabsView() = %q, should not show %q", view, unwanted)
-		}
+	if strings.Contains(view, "Workspace") {
+		t.Fatal("placeholder tab remains")
 	}
 }
 
@@ -315,8 +310,8 @@ func TestJSONTabsMoveWithHL(t *testing.T) {
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	got := updated.(model)
-	if got.selectedTab != 0 {
-		t.Fatalf("selectedTab after l = %d, want 0 for JSON workspace", got.selectedTab)
+	if got.selectedTab != 1 {
+		t.Fatalf("selectedTab after l = %d, want next action", got.selectedTab)
 	}
 
 	updated, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
@@ -355,7 +350,7 @@ func TestTabsViewStaysSimpleForSelectedSubcategory(t *testing.T) {
 	}
 
 	view := stripANSI(model.tabsView(100, 8))
-	if !strings.Contains(view, "URL Encode") || !strings.Contains(view, "URL Decode") {
+	if !strings.Contains(view, "Encode") || !strings.Contains(view, "Decode") {
 		t.Fatalf("tabsView() = %q, want selected subcategory tools", view)
 	}
 	if strings.Contains(view, "[url]") || strings.Contains(view, "Base64 Encode") {
@@ -389,11 +384,26 @@ func TestSearchFiltersConcreteTools(t *testing.T) {
 		t.Fatalf("categories after hmac search = %#v, want only Crypto", model.categories)
 	}
 	view := stripANSI(model.tabsView(100, 5))
-	if !strings.Contains(view, "HMAC SHA256") {
+	if !strings.Contains(view, "SHA256") {
 		t.Fatalf("tabsView() after hmac search = %q, want hmac tools", view)
 	}
 	if strings.Contains(view, "MD5") {
 		t.Fatalf("tabsView() after hmac search = %q, should not include unmatched hash tools", view)
+	}
+}
+
+func TestSearchUsesFuzzyMatch(t *testing.T) {
+	registry := tools.NewRegistry()
+	model := newModel(registry)
+	model.search.SetValue("jv")
+	model.applySearch()
+
+	if len(model.categories) != 1 || model.categories[0].Category != tool.CategoryJSON {
+		t.Fatalf("categories after fuzzy search = %#v, want JSON", model.categories)
+	}
+	view := stripANSI(model.tabsView(100, 5))
+	if !strings.Contains(view, "Check") {
+		t.Fatalf("tabsView() after fuzzy search = %q, want matching Check action", view)
 	}
 }
 
@@ -435,16 +445,16 @@ func TestHelpOverlayShowsAndFiltersJSONCommands(t *testing.T) {
 	if !strings.Contains(help, "Global") || !strings.Contains(help, "Current Area") || !strings.Contains(help, "Current Tool") {
 		t.Fatalf("helpView() = %q, want grouped sections", help)
 	}
-	if !strings.Contains(help, "Edit Path") || !strings.Contains(help, "Apply Output") || !strings.Contains(help, "Get Path") {
+	if !strings.Contains(help, "Edit Path") || !strings.Contains(help, "Apply Output") || !strings.Contains(help, "Run Action") {
 		t.Fatalf("helpView() = %q, want JSON command details", help)
 	}
-	if !strings.Contains(help, "Path field") || !strings.Contains(help, "query immediat") {
+	if !strings.Contains(help, "Path field") || !strings.Contains(help, "selected JSON action") {
 		t.Fatalf("helpView() = %q, want path enter instructions", help)
 	}
 
 	model.help.SetValue("path")
 	help = model.helpContent()
-	if !strings.Contains(help, "Edit Path") || strings.Contains(help, "Pretty JSON") {
+	if !strings.Contains(help, "Edit Path") || strings.Contains(help, "Save Output") {
 		t.Fatalf("filtered helpView() = %q, want only path-related commands", help)
 	}
 }
@@ -461,7 +471,7 @@ func TestJSONFooterShowsCommonActions(t *testing.T) {
 	model.focus = focusWorkspace
 
 	footer := stripANSI(model.footerLine())
-	for _, want := range []string{"[p] pretty", "[m] minify", "[c] check", "[e] escape", "[g] get", "[ctrl+u/d] output", "[alt+u/d] input", "[?] help"} {
+	for _, want := range []string{"NORMAL", "[i] edit", "[v] paste", "[x] clear", "[p] apply", "[y] copy", "[?] help"} {
 		if !strings.Contains(footer, want) {
 			t.Fatalf("footerLine() = %q, want %q", footer, want)
 		}
@@ -483,7 +493,7 @@ func TestGenericFooterHidesUnavailableOptionsShortcut(t *testing.T) {
 	if strings.Contains(footer, "[o] options") {
 		t.Fatalf("FooterHints() = %q, should not show options shortcut for optionless tool", footer)
 	}
-	if !strings.Contains(footer, "[r] run") || !strings.Contains(footer, "[?] help") {
+	if !strings.Contains(footer, "[r/Enter] run") || !strings.Contains(footer, "[?] help") {
 		t.Fatalf("FooterHints() = %q, want common no-input shortcuts", footer)
 	}
 }
@@ -529,8 +539,10 @@ func TestJSONPathEnterRunsQuery(t *testing.T) {
 	}
 	page := model.currentPage().(*jsonToolPage)
 	page.SetInput(`{"data":{"name":"sharp"}}`)
+	page.selectedAction = "json.get"
 	page.FocusOptions()
 	page.pathBox.SetValue("data.name")
+	page.startEditingFocusedField()
 
 	_, _ = page.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if got, want := page.OutputText(), "sharp"; got != want {
@@ -538,6 +550,74 @@ func TestJSONPathEnterRunsQuery(t *testing.T) {
 	}
 	if page.IsEditing() {
 		t.Fatal("path enter should leave edit mode after query")
+	}
+}
+
+func TestJSONInputAutoValidatesWhenSet(t *testing.T) {
+	registry := tools.NewRegistry()
+	model := newModel(registry)
+	for i, c := range model.categories {
+		if c.Category == tool.CategoryJSON {
+			model.selectedCat = i
+			break
+		}
+	}
+	page := model.currentPage().(*jsonToolPage)
+	page.SetSize(80, 20)
+
+	page.SetInput(`{"ok":true}`)
+	if got := stripANSI(page.Status()); got != "valid JSON" {
+		t.Fatalf("Status() after valid input = %q, want valid JSON", got)
+	}
+	if view := stripANSI(page.View()); !strings.Contains(view, "Input - valid JSON") {
+		t.Fatalf("View() = %q, want input validity label", view)
+	}
+
+	page.SetInput(`{"ok":`)
+	if got := stripANSI(page.Status()); !strings.Contains(got, "invalid JSON") {
+		t.Fatalf("Status() after invalid input = %q, want invalid JSON", got)
+	}
+	if view := stripANSI(page.View()); !strings.Contains(view, "Input - invalid JSON") {
+		t.Fatalf("View() = %q, want invalid label", view)
+	}
+}
+
+func TestJSONFocusSelectsBeforeInsertMode(t *testing.T) {
+	registry := tools.NewRegistry()
+	model := newModel(registry)
+	for i, c := range model.categories {
+		if c.Category == tool.CategoryJSON {
+			model.selectedCat = i
+			break
+		}
+	}
+	page := model.currentPage().(*jsonToolPage)
+
+	page.FocusInput()
+	if page.IsEditing() {
+		t.Fatal("FocusInput should select JSON input without entering insert mode")
+	}
+
+	if !page.HandleKey("i") {
+		t.Fatal("JSON page should handle i for insert mode")
+	}
+	if !page.IsEditing() {
+		t.Fatal("i should enter insert mode for selected JSON input")
+	}
+
+	_, _ = page.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if page.IsEditing() {
+		t.Fatal("Esc should leave JSON insert mode")
+	}
+
+	page.selectedAction = "json.get"
+	page.FocusOptions()
+	if page.IsEditing() {
+		t.Fatal("o should select path without entering insert mode")
+	}
+	page.HandleKey("o")
+	if !page.IsEditing() || page.field != editFieldOptions {
+		t.Fatalf("o should directly edit path, editing=%v focus=%v", page.IsEditing(), page.field)
 	}
 }
 
@@ -555,7 +635,6 @@ func TestOutputHalfPageScrollUsesFocusedOutput(t *testing.T) {
 	})
 	page.SetSize(30, 10)
 	page.Run()
-	page.FocusOutput()
 	before := page.output.YOffset
 	page.OutputHalfPageDown()
 	if page.output.YOffset <= before {
@@ -585,7 +664,6 @@ func TestWorkspaceCtrlDScrollsOutputEvenWhenInputFocused(t *testing.T) {
 		"line 1", "line 2", "line 3", "line 4", "line 5", "line 6", "line 7", "line 8", "line 9", "line 10",
 	}, "\n")
 	page.(*genericToolPage).renderOutput()
-	page.FocusInput()
 	page.(*genericToolPage).stopEditing()
 	before := page.(*genericToolPage).output.YOffset
 
@@ -629,6 +707,7 @@ func TestGenericInputUndoRedo(t *testing.T) {
 		},
 	})
 	page.FocusInput()
+	page.HandleKey("i")
 	page.input.SetValue("one")
 	page.trackInputChange("")
 

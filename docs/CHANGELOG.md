@@ -13,7 +13,7 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - Search across categories, subcategories, and concrete tools.
 - JSON workbench with pretty, minify, validate, sort, escape, unescape, path query, and apply-output chaining.
 - Input/output workspaces with visible borders.
-- Actions area for common tool commands.
+- Contextual shortcut hints for common tool commands.
 - Help overlay with grouped commands and filtering.
 - Output and input half-page scrolling shortcuts.
 - Undo/redo support for input editors.
@@ -22,6 +22,18 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 
 ### Changed
 
+- Normal mode now navigates regions with Tab/Shift+Tab and actions with brackets; Input/Output no longer require pane selection. Paste previews immediately, edits preview after 200ms, and stale results cannot be copied, saved, or applied. Search opens the complete action group.
+- All tool groups now share the JSON workspace interaction model: input/undo/output survive action switches and option drafts are kept separately per action in memory.
+- Known local transformations preview on action selection; network lookups, clocks, and generators require explicit execution.
+- Parameter editing now runs on Enter across every workspace; Apply consistently clears successful output and rejects errors.
+- Workspace sizing, footer hints, group/action labels, and output provenance use shared rules.
+
+- Tool search now opens inline in Categories when typing; category navigation uses arrow keys and the permanent Search panel is removed.
+- TUI focus shortcuts now map to three regions: Categories (1), Tools/Actions (2), and Workspace (3).
+- JSON now exposes selectable actions sharing one document, previews action changes, and shows Path only for Query.
+- Field selection and editing are separate across all workspaces; `i` edits, Enter runs, `s` saves, and `p` applies output.
+- Common action hints moved to the footer, leaving more space for input and output.
+
 - README rewritten as professional open source documentation.
 - Generic tool UI now adapts to tools that do not require input.
 - JSON category now uses a single workbench page instead of separate atomic JSON tabs.
@@ -29,6 +41,12 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - Product and development docs now use the current command syntax for JSON path, Base64 URL, time, UUID, and token examples.
 
 ### Fixed
+
+- Undo/redo while editing Options or JSON Path no longer changes Input; malformed secret option errors no longer reveal secret fragments.
+- Search results now execute the selected JSON action rather than always formatting JSON.
+- Output arrow keys reach the active viewport, operation notifications remain visible, and shortcut hints stay within terminal width.
+- JSON output headers no longer hide the final viewport line; errors cannot replace input through Apply.
+- JSON Check reports validation separately from data results and consistently rejects duplicate keys.
 
 - Copy/save/pipe operations use trimmed raw output instead of rendered viewport text.
 - Long input and output content wraps to visible pane width.

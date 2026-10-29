@@ -62,39 +62,49 @@ Start the interactive app:
 sharp
 ```
 
-The TUI is organized into four numbered regions:
+The TUI has three numbered regions:
 
 | Region | Purpose |
 | --- | --- |
-| `1 Search` | Search categories, subcategories, and concrete tools. |
-| `2 Categories` | Select a category or subcategory. Parent categories with subcategories are headers only. |
-| `3 Tools` | Select tools in the current subcategory. JSON uses one Workspace page. |
-| `4 Workspace` | Work with input, options/path, actions, and output. |
+| `1 Categories` | Browse categories and subcategories. Type to filter tools directly here. |
+| `2 Actions` | Select an action in the current tool group, such as Encode/Decode or Pretty/Minify. |
+| `3 Workspace` | Edit input/options, preview or run the selected action, and inspect output. |
 
-Tool options in the TUI use `key=value` pairs. Wrap values that contain spaces
-in quotes, for example `replacement="hello world"`. Secret options, such as
-HMAC keys, are masked in the normal workspace view.
+There is no permanent search box. In Categories, type `json`, `minify`, or another tool name to filter immediately. Use Up/Down to select a result, Enter to open it, and Esc to clear the filter. A single tool opens directly in the workspace. Opening a result clears the filter and restores its full action group. `/` starts search from other regions outside edit mode. Letters such as `j`, `k`, and `q` are search text in Categories.
 
-Common shortcuts:
+All tool groups use the same workspace rules. Actions within a group share input, output, and input undo history: Base64 Encode/Decode, text transformations, hash algorithms, and regex Match/Replace all keep the current document when switching. Each action remembers its own options in memory; unrelated categories and subgroups keep separate documents. Output titles identify the action that produced the result.
+
+Normal mode handles commands and navigation; only `i` or `o` enters an editor. Tab/Shift+Tab cycle Categories → Actions → Workspace. Use `[`/`]` from any region to switch actions without moving focus, or Left/Right and `h/l` in Actions. Known local transformations preview immediately after `v` paste or action changes, and about 200ms after editing stops; Esc ends editing and flushes the preview. DNS lookup, current time, and random generators run only on `r` or Enter. Options appear only when the action has parameters: `o` edits them, Enter runs, and Esc finishes editing. Inputless actions hide Input while preserving the group's document for other actions.
+
+JSON follows the same rules with Pretty, Minify, Sort, Query, Escape, Unescape, and Check. Path appears only for Query; Enter in Path queries the shared input. Check reports validation in the status line. Across all groups, `p`/`a` applies a successful result to Input and clears Output; errors cannot be applied. While input or options are incomplete, the previous result stays visible as `stale`; copy, save, and Apply are blocked until a fresh result is available.
+
+Input and Output do not need to be selected. Press `i` to edit Input directly, or `o` for Options/Path. Enter inserts a newline in Input; in Options/Path it executes and returns to Normal. While editing, letters are text and Tab does not navigate; use Esc first. In Normal mode, arrows in Workspace scroll Output. Tool options use `key=value` pairs; quote values containing spaces, for example `replacement="hello world"`. Secret options, such as HMAC keys, are masked. `?` lists available commands and option descriptions. Operation feedback appears above the shortcut hints.
+
+Common shortcuts outside edit mode:
 
 | Key | Action |
 | --- | --- |
-| `1`, `2`, `3`, `4` | Focus a region. |
-| `/` | Open search. |
-| `j` / `k` | Move in the category list. |
-| `h` / `l` | Move between tools in region 3. |
-| `i` or `Enter` | Edit input when the current tool accepts input. |
-| `o` | Edit options, or JSON path in the JSON workbench. |
-| `r` | Run the current tool or default action. |
-| `v` | Paste clipboard data into input. |
+| Tab / Shift+Tab | Cycle regions forward / backward in Normal mode. |
+| `[` / `]` | Select the previous / next action without changing region. |
+| `1`, `2`, `3` | Focus Categories, Actions, or Workspace. |
+| Type in Categories / `/` | Start inline tool search. |
+| Up / Down | Select a category or filtered result; scroll Output in Workspace. |
+| Left / Right or `h` / `l` | Select an action in region 2. |
+| Enter | Open the category selection; run the selected tool/action in regions 2 and 3. |
+| `i` | Edit Input directly. |
+| `o` | Edit options, or Path when JSON Query is selected. |
+| `r` | Run the selected tool or action. |
+| `v` | Paste clipboard data into Input and preview, staying in Normal mode. |
 | `x` / `X` | Clear input / clear output. |
 | `y` | Copy trimmed output. |
 | `s` | Save trimmed output to `sharp-output.txt`. |
-| `p` | Pipe output back into input for chaining. |
+| `p` / `a` | Apply output to input for chaining. |
+| `z` | Undo input changes; Ctrl+Z/Ctrl+Y undo/redo while editing Input. |
 | `ctrl+u` / `ctrl+d` | Scroll output by half a page. |
 | `alt+u` / `alt+d` | Scroll input by half a page. |
+| Esc | Leave editing → Workspace → Actions → Categories; clear an active search filter. |
 | `?` | Open searchable command help. |
-| `q` | Quit from normal mode. |
+| `ctrl+c` / `ctrl+q` | Quit from any region; `q` also quits outside Categories, search, and editors. |
 
 ## CLI Usage
 
@@ -142,6 +152,71 @@ CLI input can come from an argument, a file path, or stdin.
 | ![Convert](https://img.shields.io/badge/Convert-format-success) | JSON to YAML, YAML to JSON, CSV to JSON, HTTP headers to JSON |
 | ![Inspector](https://img.shields.io/badge/Inspector-JWT-lightgrey) | JWT decode without signature verification |
 | ![Generator](https://img.shields.io/badge/Generator-random-orange) | UUID v4, random password, random token |
+
+## Tool Roadmap
+
+The checklist below tracks future tool expansion. Existing capabilities are listed in **Tool Categories** above; unchecked items are planned and are not available yet. Priorities indicate the suggested implementation order, not release commitments.
+
+Keep sharp focused on local, composable data and text workflows. A tool is complete when its shared implementation works in both CLI and TUI, relevant tests pass, and the English and Chinese documentation is updated. Check off each item as it ships; proposed command names may change during implementation.
+
+### P0 — Everyday workflows
+
+- [ ] Text diff: compare two inputs and show additions, deletions, and unchanged context.
+- [ ] Number base converter: binary, octal, decimal, and hexadecimal.
+- [ ] JSON to CSV: complement the existing CSV to JSON converter.
+- [ ] String inspector: extend text counts with Unicode code points, invisible characters, and byte details.
+- [ ] Backslash escape/unescape: define supported escape rules explicitly alongside existing JSON and Go-style Unicode tools.
+- [ ] Random string generator: configurable length and character set, alongside passwords and tokens.
+- [ ] Cron parser: explain expressions and show upcoming runs with an explicit time zone.
+- [ ] Color converter: HEX, RGB, HSL, HSV, and CMYK.
+- [ ] X.509 certificate decoder: inspect PEM/DER certificate fields, validity, SANs, and fingerprints locally.
+- [ ] cURL parser: extract method, URL, headers, and body without executing the command.
+- [ ] Query string builder: build a query string from structured parameters, complementing query parsing.
+- [ ] JWT signature verification: extend the existing decoder with explicit algorithm and key options.
+
+### P1 — Formatting and structured data
+
+- [ ] HTML beautify/minify.
+- [ ] CSS beautify/minify.
+- [ ] JavaScript/TypeScript beautify/minify.
+- [ ] XML beautify/minify.
+- [ ] SQL formatter with explicit dialect selection.
+- [ ] JSON to code: start with Go structs and TypeScript interfaces; consider Java and Python later.
+- [ ] TOML ↔ JSON conversion.
+- [ ] ENV ↔ JSON conversion.
+- [ ] INI ↔ JSON conversion.
+- [ ] Markdown terminal preview.
+- [ ] HTTP request builder and sender with timeouts and readable response output.
+- [ ] TLS certificate inspector: fetch and inspect certificates from a remote endpoint.
+- [ ] IP inspector: local address classification and subnet details.
+- [ ] Port connectivity checker.
+- [ ] MIME type lookup.
+- [ ] Data URI parser.
+- [ ] cURL to code: generate request snippets from parsed commands.
+- [ ] UUID/ULID tools: add ULID generation and UUID/ULID inspection alongside UUID v4 generation.
+
+### P2 — Specialized and visual tools
+
+- [ ] QR code generator.
+- [ ] QR code reader from image files.
+- [ ] Base64 image encode/decode with file and Data URI support.
+- [ ] HTML browser preview.
+- [ ] HTML to JSX conversion.
+- [ ] SVG to CSS conversion.
+- [ ] Lorem Ipsum generator.
+- [ ] PHP ↔ JSON conversion.
+- [ ] PHP serialize/unserialize.
+- [ ] ERB beautify/minify.
+- [ ] LESS beautify/minify.
+- [ ] SCSS beautify/minify.
+
+### Supporting capabilities
+
+Implement these as needed by the tools above:
+
+- [ ] Two-input CLI/TUI workspace for text diff and other comparison tools.
+- [ ] Explicit text/file/binary input handling and file output that preserves raw bytes.
+- [ ] MIME-aware output handling for structured text, images, and previews.
 
 ## Development
 
