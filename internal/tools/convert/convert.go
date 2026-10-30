@@ -128,6 +128,10 @@ func Register(r *tool.Registry) {
 }
 
 func decodeSingleYAMLDocument(input string) (yaml.Node, error) {
+	// Reject oversized source text before YAML allocates the document tree.
+	if len(input) > 16<<20 {
+		return yaml.Node{}, fmt.Errorf("YAML input size limit exceeded (16 MiB)")
+	}
 	decoder := yaml.NewDecoder(strings.NewReader(input))
 	var doc yaml.Node
 	if err := decoder.Decode(&doc); err != nil {

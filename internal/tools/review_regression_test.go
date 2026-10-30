@@ -79,6 +79,22 @@ func TestReviewYAMLDepthBudget(t *testing.T) {
 	}
 }
 
+func TestReviewYAMLInputSizeBeforeParsing(t *testing.T) {
+	current, _ := tools.NewRegistry().Get("yaml.to_json")
+	const limit = 16 << 20
+	// A large comment has no expanded scalar cost, so the raw input needs its own cap.
+	input := "#" + strings.Repeat("x", limit-3) + "\n0"
+	out, err := current.Run(context.Background(), tool.Input{Text: input}, nil)
+	if err != nil || out.Text != "0" {
+		t.Fatalf("rejected input at the size limit: %q, %v", out.Text, err)
+	}
+	for _, oversized := range []string{input + " ", "[" + strings.Repeat("x", limit)} {
+		if _, err := current.Run(context.Background(), tool.Input{Text: oversized}, nil); err == nil || !strings.Contains(err.Error(), "YAML input size limit") {
+			t.Fatalf("oversized input reached parser: %v", err)
+		}
+	}
+}
+
 func TestReviewJSONValidateRejectsDuplicates(t *testing.T) {
 	current, _ := tools.NewRegistry().Get("json.validate")
 	for _, input := range []string{`{"a":1,"a":2}`, `{"nested":{"a":1,"a":2}}`} {

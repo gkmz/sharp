@@ -178,7 +178,7 @@ CLI input can come from an argument, a file path, or stdin.
 
 `time from` infers units from the digit count after removing the sign and leading zeros: 1–12 digits are seconds, 13–18 are milliseconds, and 19 are nanoseconds (within signed 64-bit range). Shorter nanosecond values are ambiguous and are not detected as nanoseconds; for example, `946684800000000000` is interpreted as milliseconds. Convert such values to seconds or milliseconds before use; an explicit unit selector is not currently available.
 
-YAML conversion supports merge keys (`<<`), with explicit fields overriding merged fields and earlier mappings in a merge sequence taking precedence. Alias cycles and duplicate normalized keys are rejected. Conversion limits are 100,000 expanded node visits, 16 MiB of expanded scalar text (including keys), and 256 nested nodes.
+YAML conversion supports merge keys (`<<`), with explicit fields overriding merged fields and earlier mappings in a merge sequence taking precedence. Alias cycles and duplicate normalized keys are rejected. Conversion limits are 16 MiB of input before parsing, 100,000 expanded node visits, 16 MiB of expanded scalar text (including keys), and 256 nested nodes.
 
 ### URL values and random tokens
 

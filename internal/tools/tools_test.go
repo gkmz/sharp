@@ -604,12 +604,12 @@ func TestJWTDecode(t *testing.T) {
 	var got struct {
 		Header            map[string]any `json:"header"`
 		Payload           map[string]any `json:"payload"`
-		SignatureVerified bool           `json:"signatureVerified"`
+		SignatureVerified *bool          `json:"signatureVerified"`
 	}
 	if err := json.Unmarshal([]byte(out.Text), &got); err != nil {
 		t.Fatalf("jwt.decode output = %q, want valid JSON: %v", out.Text, err)
 	}
-	if got.Header["alg"] != "HS256" || got.Header["typ"] != "JWT" || got.Payload["name"] != "sharp" || got.Payload["iat"] != float64(1700000000) || got.SignatureVerified {
+	if got.Header["alg"] != "HS256" || got.Header["typ"] != "JWT" || got.Payload["name"] != "sharp" || got.Payload["iat"] != float64(1700000000) || got.SignatureVerified == nil || *got.SignatureVerified {
 		t.Fatalf("jwt.decode output = %q, want decoded header and payload", out.Text)
 	}
 	if out.MimeType != "application/json" {
