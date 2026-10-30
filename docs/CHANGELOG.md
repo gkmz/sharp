@@ -57,6 +57,8 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 
 ### Fixed
 
+- Fixed YAML merge precedence and scalar key aliases; bounded expanded node visits and honored conversion cancellation. Aligned CLI JSON duplicate-key validation, preserved help-like option values, and stopped acronym lookahead at separators.
+- Fixed shared JSON action registration and execution of custom validators. Restricted automatic previews to known local tool IDs, skipped unchanged Escape previews, and preserved feedback/footer rows on short terminals. Clarified recent-tool ID retention and timestamp unit inference.
 - Help adapts to its viewport width without truncating long key names; overlay clipping preserves ANSI color sequences.
 - Undo/redo while editing Options or JSON Path no longer changes Input; malformed secret option errors no longer reveal secret fragments.
 - Search results now execute the selected JSON action rather than always formatting JSON.

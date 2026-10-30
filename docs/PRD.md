@@ -420,8 +420,10 @@ Possible settings:
 - Custom keybindings
 - Favorite tools
 
-Configuration is future scope. The current product does not persist user input,
-history, secrets, or custom settings.
+Configuration is future scope. The current product persists only the five most
+recent tool IDs in `sharp/recent-tools.json` under the OS user configuration
+directory. It does not persist user input, output, option values, secrets,
+operation content history, or custom settings.
 
 ## 13. Technical Architecture
 

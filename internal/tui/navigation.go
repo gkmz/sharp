@@ -180,12 +180,16 @@ func canPreview(t tool.Tool) bool {
 	if !toolUsesInput(t) {
 		return false
 	}
-	prefix, _, _ := strings.Cut(t.ID(), ".")
-	switch prefix {
-	case "json", "yaml", "csv", "headers", "b64", "b64url", "b64rawurl", "url", "hex", "html", "unicode", "hash", "hmac", "text", "regex", "query", "cidr", "jwt":
+	switch t.ID() {
+	case "json.pretty", "json.minify", "json.sort", "json.get", "json.escape", "json.unescape", "json.validate",
+		"json.to_yaml", "yaml.to_json", "csv.to_json", "headers.to_json",
+		"b64.encode", "b64.decode", "b64url.encode", "b64url.decode", "b64rawurl.encode", "b64rawurl.decode",
+		"url.encode", "url.decode", "url.parse", "query.parse", "cidr.parse",
+		"hex.encode", "hex.decode", "html.escape", "html.unescape", "unicode.escape", "unicode.unescape",
+		"hash.md5", "hash.sha1", "hash.sha224", "hash.sha256", "hash.sha384", "hash.sha512", "hash.crc32", "hmac.sha256", "hmac.sha512",
+		"text.upper", "text.lower", "text.trim", "text.camel", "text.pascal", "text.snake", "text.kebab",
+		"text.sort", "text.uniq", "text.count", "regex.test", "regex.replace", "jwt.decode", "time.from", "time.parse":
 		return true
-	case "time":
-		return t.ID() == "time.from" || t.ID() == "time.parse"
 	}
 	return false
 }

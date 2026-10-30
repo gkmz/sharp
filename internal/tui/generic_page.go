@@ -109,6 +109,7 @@ func (p *genericToolPage) SelectTool(t tool.Tool) {
 
 func (p *genericToolPage) Preview() {
 	p.revision++
+	p.previewPending = false
 	if !canPreview(p.tool) {
 		return
 	}
@@ -165,7 +166,9 @@ func (p *genericToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 	case tea.KeyMsg:
 		if event.String() == "esc" {
 			p.stopEditing()
-			p.Preview()
+			if p.previewPending {
+				p.Preview()
+			}
 			return p, nil
 		}
 		if !p.editing {

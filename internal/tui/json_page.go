@@ -82,6 +82,7 @@ func (p *jsonToolPage) SetSize(width, height int) {
 }
 
 func (p *jsonToolPage) SelectTool(t tool.Tool) {
+	p.tools[t.ID()] = t
 	if p.selectedAction == t.ID() {
 		return
 	}
@@ -98,6 +99,10 @@ func (p *jsonToolPage) SelectTool(t tool.Tool) {
 
 func (p *jsonToolPage) Preview() {
 	p.revision++
+	p.previewPending = false
+	if t := p.tools[p.selectedAction]; t == nil || !canPreview(t) {
+		return
+	}
 	if strings.TrimSpace(p.input.Value()) == "" {
 		p.ClearOutput()
 		p.refreshInputState()
@@ -132,7 +137,9 @@ func (p *jsonToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 	case tea.KeyMsg:
 		if event.String() == "esc" {
 			p.stopEditing()
-			p.Preview()
+			if p.previewPending {
+				p.Preview()
+			}
 			return p, nil
 		}
 		if !p.editing {
@@ -375,6 +382,7 @@ func (p *jsonToolPage) runPathQuery() {
 
 func (p *jsonToolPage) runAction(id string, options tool.Options, preview bool) {
 	p.revision++
+	p.previewPending = false
 	t, ok := p.tools[id]
 	if !ok {
 		p.outputText = "missing JSON action: " + id
@@ -385,10 +393,11 @@ func (p *jsonToolPage) runAction(id string, options tool.Options, preview bool) 
 	}
 	// 校验只更新状态，不覆盖可继续处理的数据结果。
 	if id == "json.validate" {
-		if err := jsonutil.RejectDuplicateObjectKeys(p.input.Value()); err != nil {
+		out, err := t.Run(context.Background(), tool.Input{Text: p.input.Value()}, options)
+		if err != nil {
 			p.status = errorStyle.Render(err.Error())
 		} else {
-			p.status = successStyle.Render("valid JSON")
+			p.status = successStyle.Render(out.Text)
 			p.markToolUsed(id)
 		}
 		return

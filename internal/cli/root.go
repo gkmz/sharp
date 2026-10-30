@@ -108,7 +108,7 @@ func toolCommand(name string, t tool.Tool) *cobra.Command {
 		Short:              t.Description(),
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if toolHelpRequested(args) {
+			if toolHelpRequested(args, t.Options()) {
 				return cmd.Help()
 			}
 			options, inputArgs, err := parseToolCommandArgs(args, t.Options())
@@ -133,13 +133,24 @@ func toolCommand(name string, t tool.Tool) *cobra.Command {
 	return cmd
 }
 
-func toolHelpRequested(args []string) bool {
-	for _, arg := range args {
+func toolHelpRequested(args []string, defs []tool.Option) bool {
+	known := map[string]bool{}
+	for _, def := range defs {
+		known[def.Name] = true
+	}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		if arg == "--" {
 			return false
 		}
 		if arg == "--help" || arg == "-h" {
 			return true
+		}
+		if strings.HasPrefix(arg, "--") {
+			name, _, inline := strings.Cut(strings.TrimPrefix(arg, "--"), "=")
+			if known[name] && !inline {
+				i++
+			}
 		}
 	}
 	return false

@@ -49,6 +49,9 @@ func Register(r *tool.Registry) {
 			if !json.Valid([]byte(input.Text)) {
 				return tool.Output{}, fmt.Errorf("invalid JSON")
 			}
+			if err := jsonutil.RejectDuplicateObjectKeys(input.Text); err != nil {
+				return tool.Output{}, err
+			}
 			return tool.Output{Text: "valid JSON"}, nil
 		},
 	})

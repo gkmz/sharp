@@ -20,9 +20,10 @@ const (
 
 // 每次修改与显式操作都会推进版本，迟到的预览不能覆盖新结果。
 type workspacePreview struct {
-	revision uint64
-	stale    bool
-	usedTool string
+	revision       uint64
+	stale          bool
+	usedTool       string
+	previewPending bool
 }
 
 func (p *workspacePreview) markToolUsed(id string) { p.usedTool = id }
@@ -37,8 +38,8 @@ type workspacePreviewMsg struct {
 	revision uint64
 }
 
-func (p *workspacePreview) changed()               { p.revision++; p.stale = true }
-func (p *workspacePreview) settled()               { p.revision++; p.stale = false }
+func (p *workspacePreview) changed()               { p.revision++; p.stale = true; p.previewPending = true }
+func (p *workspacePreview) settled()               { p.revision++; p.stale = false; p.previewPending = false }
 func (p *workspacePreview) OutputReady() bool      { return !p.stale }
 func (p *workspacePreview) previewVersion() uint64 { return p.revision }
 func (p *workspacePreview) schedule(page toolPage) tea.Cmd {

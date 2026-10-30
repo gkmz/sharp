@@ -166,13 +166,8 @@ func isUncasedLetter(r rune) bool {
 }
 
 func nextWordRune(runes []rune, start int) rune {
-	for i := start; i < len(runes); i++ {
-		if isWordRune(runes[i]) {
-			return runes[i]
-		}
-		if len(strings.TrimSpace(string(runes[i]))) > 0 {
-			return 0
-		}
+	if start < len(runes) && isWordRune(runes[start]) {
+		return runes[start]
 	}
 	return 0
 }

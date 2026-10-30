@@ -383,7 +383,13 @@ func (m model) View() string {
 	footer := fitWidth(footerStyle.Render(m.footerLine()), m.width)
 	notification := fitWidth(m.status, m.width)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
-	view := body + "\n" + notification + "\n" + footer
+	// Keep feedback and commands visible even when the workbench is clipped.
+	view := notification + "\n" + footer
+	if m.height > 2 {
+		view = fitHeight(body, m.height-2) + "\n" + view
+	} else if m.height == 1 {
+		view = footer
+	}
 	if m.showHelp {
 		view = overlayPanel(view, m.helpView(), m.width, m.height)
 	}
@@ -1189,7 +1195,6 @@ func (m *model) newToolPage(t tool.Tool) toolPage {
 			for _, tab := range c.Tabs {
 				tools[tab.Tool.ID()] = tab.Tool
 			}
-			break
 		}
 		return newJSONToolPage(t, tools)
 	}

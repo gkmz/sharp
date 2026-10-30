@@ -42,11 +42,14 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryConvert,
 		DescriptionValue: "Convert YAML to JSON.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
+			if err := ctx.Err(); err != nil {
+				return tool.Output{}, err
+			}
 			doc, err := decodeSingleYAMLDocument(input.Text)
 			if err != nil {
 				return tool.Output{}, err
 			}
-			v, err := yamlNodeToJSONValue(&doc)
+			v, err := (&yamlConversion{ctx: ctx, visiting: map[*yaml.Node]bool{}, remaining: 100000, scalarBytes: 16 << 20}).value(&doc)
 			if err != nil {
 				return tool.Output{}, err
 			}
@@ -144,19 +147,46 @@ func decodeSingleYAMLDocument(input string) (yaml.Node, error) {
 	return yaml.Node{}, fmt.Errorf("YAML stream contains multiple documents")
 }
 
-func yamlNodeToJSONValue(n *yaml.Node) (any, error) {
-	return yamlNodeToJSONValueWithStack(n, map[*yaml.Node]bool{})
+type yamlConversion struct {
+	ctx         context.Context
+	visiting    map[*yaml.Node]bool
+	remaining   int
+	scalarBytes int
 }
 
-func yamlNodeToJSONValueWithStack(n *yaml.Node, visiting map[*yaml.Node]bool) (any, error) {
+// Budget every expanded visit, including aliases, to bound CPU and output size.
+func (c *yamlConversion) enter(n *yaml.Node) error {
+	if err := c.ctx.Err(); err != nil {
+		return err
+	}
+	c.remaining--
+	if c.remaining < 0 {
+		return fmt.Errorf("YAML expansion limit exceeded")
+	}
+	if len(c.visiting) >= 256 {
+		return fmt.Errorf("YAML nesting limit exceeded")
+	}
+	if n.Kind == yaml.ScalarNode {
+		c.scalarBytes -= len(n.Value)
+		if c.scalarBytes < 0 {
+			return fmt.Errorf("YAML expanded scalar byte limit exceeded")
+		}
+	}
+	if c.visiting[n] {
+		return fmt.Errorf("YAML alias cycle is not supported")
+	}
+	c.visiting[n] = true
+	return nil
+}
+
+func (c *yamlConversion) value(n *yaml.Node) (any, error) {
 	if n == nil {
 		return nil, nil
 	}
-	if visiting[n] {
-		return nil, fmt.Errorf("YAML alias cycle is not supported")
+	if err := c.enter(n); err != nil {
+		return nil, err
 	}
-	visiting[n] = true
-	defer delete(visiting, n)
+	defer delete(c.visiting, n)
 
 	switch n.Kind {
 	case 0:
@@ -165,29 +195,67 @@ func yamlNodeToJSONValueWithStack(n *yaml.Node, visiting map[*yaml.Node]bool) (a
 		if len(n.Content) == 0 {
 			return nil, nil
 		}
-		return yamlNodeToJSONValueWithStack(n.Content[0], visiting)
+		return c.value(n.Content[0])
 	case yaml.MappingNode:
+		if len(n.Content) > c.remaining {
+			return nil, fmt.Errorf("YAML expansion limit exceeded")
+		}
 		out := make(map[string]any, len(n.Content)/2)
+		explicit := make(map[string]bool, len(n.Content)/2)
+		var merge *yaml.Node
 		for i := 0; i < len(n.Content); i += 2 {
+			key := n.Content[i]
+			if key.Kind == yaml.ScalarNode && key.Tag == "!!merge" {
+				if merge != nil {
+					return nil, fmt.Errorf("duplicate YAML merge key")
+				}
+				merge = n.Content[i+1]
+				continue
+			}
 			// YAML 允许数字、布尔等标量作为 map key；转换为 JSON 时必须先规范化为字符串 key。
-			normalizedKey, err := yamlScalarKeyToString(n.Content[i])
+			normalizedKey, err := c.key(key)
 			if err != nil {
 				return nil, err
 			}
-			if _, exists := out[normalizedKey]; exists {
+			if explicit[normalizedKey] {
 				return nil, fmt.Errorf("YAML map key %q is duplicated after JSON normalization", normalizedKey)
 			}
-			normalizedValue, err := yamlNodeToJSONValueWithStack(n.Content[i+1], visiting)
+			explicit[normalizedKey] = true
+			normalizedValue, err := c.value(n.Content[i+1])
 			if err != nil {
 				return nil, err
 			}
 			out[normalizedKey] = normalizedValue
 		}
+		if merge != nil {
+			merged, err := c.value(merge)
+			if err != nil {
+				return nil, err
+			}
+			maps := []any{merged}
+			if sequence, ok := merged.([]any); ok {
+				maps = sequence
+			}
+			for _, item := range maps {
+				mapping, ok := item.(map[string]any)
+				if !ok {
+					return nil, fmt.Errorf("YAML merge requires a mapping or sequence of mappings")
+				}
+				for key, value := range mapping {
+					if _, exists := out[key]; !exists {
+						out[key] = value
+					}
+				}
+			}
+		}
 		return out, nil
 	case yaml.SequenceNode:
+		if len(n.Content) > c.remaining {
+			return nil, fmt.Errorf("YAML expansion limit exceeded")
+		}
 		out := make([]any, len(n.Content))
 		for i, item := range n.Content {
-			normalizedItem, err := yamlNodeToJSONValueWithStack(item, visiting)
+			normalizedItem, err := c.value(item)
 			if err != nil {
 				return nil, err
 			}
@@ -201,10 +269,23 @@ func yamlNodeToJSONValueWithStack(n *yaml.Node, visiting map[*yaml.Node]bool) (a
 		}
 		return v, nil
 	case yaml.AliasNode:
-		return yamlNodeToJSONValueWithStack(n.Alias, visiting)
+		return c.value(n.Alias)
 	default:
 		return nil, fmt.Errorf("unsupported YAML node kind: %d", n.Kind)
 	}
+}
+
+func (c *yamlConversion) key(n *yaml.Node) (string, error) {
+	if n != nil {
+		if err := c.enter(n); err != nil {
+			return "", err
+		}
+		defer delete(c.visiting, n)
+		if n.Kind == yaml.AliasNode {
+			return c.key(n.Alias)
+		}
+	}
+	return yamlScalarKeyToString(n)
 }
 
 func yamlScalarKeyToString(n *yaml.Node) (string, error) {
