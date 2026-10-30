@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -522,8 +521,8 @@ func flowLabels(width, height int, labels []string, selected int, active bool) s
 	lines := 0
 	// 工具区按标签宽度流式排布：一行放不下才换行，类似 lazygit 顶部 tab 标题。
 	for i, labelText := range labels {
-		label := trimToWidth(labelText, max(8, min(24, width)))
-		cellWidth := len(label) + 2
+		label := truncateDisplay(labelText, max(8, min(24, width)))
+		cellWidth := lipgloss.Width(label) + 2
 		separator := 1
 		if lineWidth == 0 {
 			separator = 0
@@ -578,8 +577,8 @@ func labelRows(width int, labels []string) int {
 	lineWidth := 0
 	// 先用同一套显示宽度规则预估工具标签需要几行，再把剩余高度全部交给 Workspace。
 	for _, labelText := range labels {
-		label := trimToWidth(labelText, max(8, min(24, width)))
-		cellWidth := len(label) + 2
+		label := truncateDisplay(labelText, max(8, min(24, width)))
+		cellWidth := lipgloss.Width(label) + 2
 		separator := 0
 		if lineWidth > 0 {
 			separator = 1
@@ -1303,9 +1302,6 @@ func buildCategories(tools []tool.Tool) []categoryGroup {
 		}
 		current.Tabs = append(current.Tabs, tabItem{Tool: t})
 	}
-	for i := range flat {
-		orderJSONActions(flat[i].Tabs)
-	}
 	return expandCategoryRows(flat)
 }
 
@@ -1336,9 +1332,6 @@ func filterCategories(all []categoryGroup, q string) []categoryGroup {
 			byCategory = append(byCategory, categoryGroup{Category: c.Category})
 		}
 		byCategory[idx].Tabs = append(byCategory[idx].Tabs, filteredTabs...)
-	}
-	for i := range byCategory {
-		orderJSONActions(byCategory[i].Tabs)
 	}
 	return expandCategoryRows(byCategory)
 }
@@ -1399,10 +1392,11 @@ func expandCategoryRows(categories []categoryGroup) []categoryGroup {
 		groups := groupedTabs(c.Tabs)
 		if len(groups) <= 1 {
 			subcategory := ""
+			tabs := c.Tabs
 			if len(groups) == 1 {
-				subcategory = groups[0].Name
+				subcategory, tabs = groups[0].Name, groups[0].Tabs
 			}
-			out = append(out, categoryGroup{Category: c.Category, Subcategory: subcategory, Tabs: c.Tabs})
+			out = append(out, categoryGroup{Category: c.Category, Subcategory: subcategory, Tabs: tabs})
 			continue
 		}
 		out = append(out, categoryGroup{Category: c.Category, Header: true})
@@ -1426,12 +1420,18 @@ func groupedTabs(tabs []tabItem) []toolSubgroup {
 		}
 		groups[idx].Tabs = append(groups[idx].Tabs, tab)
 	}
+	for i := range groups {
+		orderToolActions(groups[i].Tabs)
+	}
 	return groups
 }
 
 func toolSubcategory(t tool.Tool) string {
 	if t == nil {
 		return "tools"
+	}
+	if group, _ := consolidatedGroup(t); group != nil {
+		return group.key
 	}
 	id := t.ID()
 	if prefix, _, ok := strings.Cut(id, "."); ok && prefix != "" {
@@ -1442,62 +1442,6 @@ func toolSubcategory(t tool.Tool) string {
 		return strings.ToLower(words[0])
 	}
 	return "tools"
-}
-
-func parseOptionText(text string, specs []tool.Option) (tool.Options, error) {
-	options := tool.Options{}
-	allowed := make(map[string]bool, len(specs))
-	for _, opt := range specs {
-		allowed[opt.Name] = true
-		if opt.Default != "" {
-			options[opt.Name] = opt.Default
-		}
-	}
-
-	// TUI 使用轻量 key=value 语法；带空格的值必须加引号，例如 replacement="hello world"。
-	for _, part := range optionPattern.FindAllString(text, -1) {
-		k, v, ok := strings.Cut(part, "=")
-		if !ok {
-			return nil, fmt.Errorf("invalid option %q, expected key=value", part)
-		}
-		k = strings.TrimSpace(k)
-		if k == "" {
-			return nil, fmt.Errorf("option name cannot be empty")
-		}
-		if !allowed[k] {
-			return nil, fmt.Errorf("unknown option: %s", k)
-		}
-		options[k] = unquoteOptionValue(strings.TrimSpace(v))
-	}
-
-	// 和 CLI 保持一致：必填项缺失时阻止运行工具，把错误显示在输出区域。
-	for _, opt := range specs {
-		if opt.Required && strings.TrimSpace(options[opt.Name]) == "" {
-			return nil, fmt.Errorf("missing required option: %s", opt.Name)
-		}
-	}
-	return options, nil
-}
-
-var optionPattern = regexp.MustCompile(`\S+="[^"]*"|\S+='[^']*'|\S+`)
-
-func unquoteOptionValue(value string) string {
-	if len(value) < 2 {
-		return value
-	}
-	if (value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'') {
-		return value[1 : len(value)-1]
-	}
-	return value
-}
-
-func hasSecretOptions(options []tool.Option) bool {
-	for _, opt := range options {
-		if opt.Secret {
-			return true
-		}
-	}
-	return false
 }
 
 func toolUsesInput(t tool.Tool) bool {

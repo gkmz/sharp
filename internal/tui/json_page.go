@@ -67,7 +67,11 @@ func newJSONToolPage(t tool.Tool, tools map[string]tool.Tool) *jsonToolPage {
 // SetSize recalculates the JSON workbench layout and child component sizes.
 func (p *jsonToolPage) SetSize(width, height int) {
 	p.height = height
-	p.width, p.inputBoxH, p.pathBoxH, p.outputBoxH = workspaceSizes(width, height, true, p.selectedAction == "json.get")
+	optionRows := 0
+	if p.selectedAction == "json.get" {
+		optionRows = 1
+	}
+	p.width, p.inputBoxH, p.pathBoxH, p.outputBoxH = workspaceSizes(width, height, true, optionRows)
 	innerWidth := max(1, p.width-2)
 	p.input.SetWidth(innerWidth)
 	p.input.SetHeight(max(1, p.inputBoxH-2))

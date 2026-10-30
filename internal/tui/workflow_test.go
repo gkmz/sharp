@@ -339,17 +339,20 @@ func TestWorkflowGenericOptionsFitWorkspace(t *testing.T) {
 	}
 }
 
-func TestWorkflowSearchRetainsCategoryHierarchy(t *testing.T) {
+func TestWorkflowSearchKeepsConsolidatedConvertAndStandaloneJSON(t *testing.T) {
 	m := workflowModel(tool.CategoryJSON)
 	m = workflowKey(m, "json")
-	headers := 0
+	convertRows := 0
 	for _, category := range m.categories {
-		if category.Header && category.Category == tool.CategoryConvert {
-			headers++
+		if category.Category == tool.CategoryConvert {
+			convertRows++
+			if category.Header || len(category.Tabs) != 4 {
+				t.Fatal("filtered Convert should keep its four matching actions in one selectable row")
+			}
 		}
 	}
-	if headers != 1 {
-		t.Fatalf("filtered Convert has %d headers, want one grouped parent", headers)
+	if convertRows != 1 {
+		t.Fatalf("filtered Convert has %d rows, want one entry", convertRows)
 	}
 	for _, category := range m.categories {
 		if category.Category == tool.CategoryJSON && !category.Header {

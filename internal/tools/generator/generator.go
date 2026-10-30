@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -55,12 +56,11 @@ func Register(r *tool.Registry) {
 		IDValue:          "token",
 		NameValue:        "Random Token",
 		CategoryValue:    tool.CategoryGenerator,
-		DescriptionValue: "Generate a cryptographically secure base64url token.",
-		OptionsValue: []tool.Option{{
-			Name:        "bytes",
-			Description: "Number of random bytes",
-			Default:     "32",
-		}},
+		DescriptionValue: "Generate a secure random token as hex, base64, or base64url.",
+		OptionsValue: []tool.Option{
+			{Name: "bytes", Description: "Number of random bytes before encoding (1-4096), not output characters", Default: "32"},
+			{Name: "format", Description: "hex: lowercase; base64: standard with padding; base64url: URL-safe without padding", Default: "base64url", Choices: []string{"hex", "base64", "base64url"}},
+		},
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
 			n, err := intOption(options, "bytes", 32)
 			if err != nil {
@@ -69,11 +69,21 @@ func Register(r *tool.Registry) {
 			if n < 1 || n > 4096 {
 				return tool.Output{}, fmt.Errorf("bytes must be between 1 and 4096")
 			}
+			encodeToken := base64.RawURLEncoding.EncodeToString
+			switch options["format"] {
+			case "", "base64url":
+			case "hex":
+				encodeToken = hex.EncodeToString
+			case "base64":
+				encodeToken = base64.StdEncoding.EncodeToString
+			default:
+				return tool.Output{}, fmt.Errorf("format must be hex, base64, or base64url")
+			}
 			b := make([]byte, n)
 			if _, err := rand.Read(b); err != nil {
 				return tool.Output{}, err
 			}
-			return tool.Output{Text: base64.RawURLEncoding.EncodeToString(b)}, nil
+			return tool.Output{Text: encodeToken(b)}, nil
 		},
 	})
 }

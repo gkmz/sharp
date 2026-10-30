@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -16,12 +15,12 @@ import (
 type genericToolPage struct {
 	workspacePreview
 	height       int
-	optionDrafts map[string]string
+	optionDrafts map[string]optionDraft
 	lastAction   string
 	active       bool
 	tool         tool.Tool
 	input        textarea.Model
-	optionBox    textinput.Model
+	optionForm   optionForm
 	output       viewport.Model
 	outputText   string
 	outputErr    bool
@@ -51,33 +50,20 @@ var specialPageFactories = map[string]func(tool.Tool) toolPage{}
 func newGenericToolPage(t tool.Tool) *genericToolPage {
 	input := newWorkspaceInput()
 
-	optionBox := textinput.New()
-	optionBox.Placeholder = "option=value option2=value2"
-	optionBox.Prompt = ""
-	optionBox.TextStyle, optionBox.PlaceholderStyle = textStyle, dimStyle
-	optionBox.Cursor.Style = focusStyle
-	if hasSecretOptions(t.Options()) {
-		// Secret 参数所在的整行使用密码模式，避免 HMAC key 等值在编辑时直接暴露。
-		optionBox.EchoMode = textinput.EchoPassword
-		optionBox.EchoCharacter = '*'
-	}
-	optionBox.Blur()
-
 	output := viewport.New(80, 12)
 
 	p := &genericToolPage{
 		active:       true,
-		optionDrafts: map[string]string{},
+		optionDrafts: map[string]optionDraft{},
 		tool:         t,
 		input:        input,
-		optionBox:    optionBox,
+		optionForm:   newOptionForm(t.Options(), nil),
 		output:       output,
 		options:      tool.Options{},
 		status:       "i edit | o options | r/Enter run | y copy | s save | p apply",
 		hasOptions:   len(t.Options()) > 0,
 		hasInput:     toolUsesInput(t),
 	}
-	p.loadSelectedOptions()
 	p.FocusInput()
 	return p
 }
@@ -85,13 +71,13 @@ func newGenericToolPage(t tool.Tool) *genericToolPage {
 // SetSize recalculates the generic page layout and child component sizes.
 func (p *genericToolPage) SetSize(width, height int) {
 	p.height = height
-	p.width, p.inputBoxH, p.optionsBoxH, p.outputBoxH = workspaceSizes(width, height, p.hasInput, p.hasOptions)
+	p.width, p.inputBoxH, p.optionsBoxH, p.outputBoxH = workspaceSizes(width, height, p.hasInput, len(p.tool.Options()))
 	innerWidth := max(1, p.width-2)
 	p.input.SetWidth(innerWidth)
 	if p.hasInput {
 		p.input.SetHeight(max(1, p.inputBoxH-2))
 	}
-	p.optionBox.Width = innerWidth
+	p.optionForm.SetWidth(innerWidth)
 	p.output.Width = innerWidth
 	p.output.Height = max(1, p.outputBoxH-2)
 	p.renderOutput()
@@ -101,23 +87,16 @@ func (p *genericToolPage) SelectTool(t tool.Tool) {
 	if p.tool.ID() == t.ID() {
 		return
 	}
-	p.optionDrafts[p.tool.ID()] = p.optionBox.Value()
+	p.optionDrafts[p.tool.ID()] = optionDraft{values: p.optionForm.Values(), selected: p.optionForm.selected}
 	p.stopEditing()
 	p.revision++
 	p.tool = t
 	p.hasInput = toolUsesInput(t)
 	p.hasOptions = len(t.Options()) > 0
-	p.optionBox.EchoMode = textinput.EchoNormal
-	if hasSecretOptions(t.Options()) {
-		p.optionBox.EchoMode = textinput.EchoPassword
-		p.optionBox.EchoCharacter = '*'
-	}
+	draft := p.optionDrafts[t.ID()]
+	p.optionForm = newOptionForm(t.Options(), draft.values)
+	p.optionForm.selected = draft.selected
 	p.options = tool.Options{}
-	if draft, ok := p.optionDrafts[t.ID()]; ok {
-		p.optionBox.SetValue(draft)
-	} else {
-		p.loadSelectedOptions()
-	}
 	_ = p.parseOptions()
 	if (p.field == editFieldOptions && !p.hasOptions) || (p.field == editFieldInput && !p.hasInput) {
 		p.FocusInput()
@@ -199,8 +178,8 @@ func (p *genericToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 			p.stopEditing()
 			return p, nil
 		}
-		// Tab 属于区域导航；编辑中先 Esc，不能隐式切到另一个字段。
-		if event.String() == "tab" || event.String() == "shift+tab" {
+		// Tab stays inside Options; Input still reserves it for Normal navigation.
+		if (event.String() == "tab" || event.String() == "shift+tab") && p.field == editFieldInput {
 			return p, nil
 		}
 	}
@@ -222,9 +201,9 @@ func (p *genericToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 			return p, tea.Batch(cmd, p.schedule(p))
 		}
 	} else {
-		before := p.optionBox.Value()
-		p.optionBox, cmd = p.optionBox.Update(msg)
-		if p.optionBox.Value() != before {
+		var changed bool
+		changed, cmd = p.optionForm.Update(msg)
+		if changed {
 			p.changed()
 			if canPreview(p.tool) {
 				return p, tea.Batch(cmd, p.schedule(p))
@@ -242,15 +221,8 @@ func (p *genericToolPage) View() string {
 	}
 
 	if p.hasOptions {
-		var b strings.Builder
-		if p.active && p.editing && p.field == editFieldOptions {
-			b.WriteString(p.optionBox.View() + "\n")
-		} else {
-			b.WriteString(dimStyle.Render(p.optionSummary()) + "\n")
-		}
-		blocks = append(blocks, workspaceSection("Options", p.active && p.editing && p.field == editFieldOptions, b.String(), p.width, p.optionsBoxH))
-	} else {
-		// 无参数工具不再占一整块区域，把高度留给输入/输出。
+		editing := p.active && p.editing && p.field == editFieldOptions
+		blocks = append(blocks, workspaceSection("Options", editing, p.optionForm.View(editing, max(1, p.optionsBoxH-2)), p.width, p.optionsBoxH))
 	}
 
 	output := workspaceOutputView(p.output, p.outputText, p.lastAction, workspaceOutputHint(canPreview(p.tool), p.hasInput))
@@ -270,7 +242,7 @@ func (p *genericToolPage) FocusInput() {
 	}
 	p.field = editFieldInput
 	p.editing = false
-	p.optionBox.Blur()
+	p.optionForm.Blur()
 	p.input.Blur()
 }
 
@@ -283,7 +255,7 @@ func (p *genericToolPage) FocusOptions() {
 	p.field = editFieldOptions
 	p.editing = false
 	p.input.Blur()
-	p.optionBox.Blur()
+	p.optionForm.Blur()
 }
 
 // OutputHalfPageDown scrolls output down by half a page.
@@ -321,10 +293,6 @@ func (p *genericToolPage) run(preview bool) {
 		p.settled()
 		p.lastAction = p.tool.Name()
 		p.outputText = err.Error()
-		if hasSecretOptions(p.tool.Options()) {
-			// 解析错误可能引用未加引号的密钥片段，不能直接回显。
-			p.outputText = "Invalid options; use key=value and quote values containing spaces. Press o to edit."
-		}
 		p.outputErr = true
 		p.renderOutput()
 		p.status = errorStyle.Render("invalid options: " + p.tool.ID())
@@ -433,7 +401,7 @@ func (p *genericToolPage) HelpCommands() []helpCommand {
 		)
 	}
 	if p.hasOptions {
-		commands = append(commands, helpCommand{Key: "o", Command: "Edit Options", Description: "Edit option=value pairs; Enter runs, Esc returns to Normal."})
+		commands = append(commands, helpCommand{Key: "o", Command: "Edit Options", Description: "Edit values beside fixed labels; Tab/Shift+Tab moves between fields, Left/Right selects choices, Enter runs, Esc returns to Normal."})
 		for _, opt := range p.tool.Options() {
 			commands = append(commands, helpCommand{Key: "--" + opt.Name, Command: "Option", Description: opt.Description})
 		}
@@ -443,6 +411,17 @@ func (p *genericToolPage) HelpCommands() []helpCommand {
 
 // FooterHints returns status bar shortcuts customized to the current tool shape.
 func (p *genericToolPage) FooterHints() string {
+	if p.editing && p.field == editFieldOptions {
+		hints := []string{}
+		if p.optionForm.HasChoices() {
+			hints = append(hints, statusHint("←/→", "choose"))
+		}
+		if len(p.tool.Options()) > 1 {
+			hints = append(hints, statusHint("Tab/S-Tab", "field"))
+		}
+		hints = append(hints, statusHint("Enter", "run"), statusHint("Esc", "normal"))
+		return modeStatusLine("INSERT", "Options", hints...)
+	}
 	return workspaceFooter(canPreview(p.tool), p.hasInput, p.hasOptions, p.editing, p.field, "Options")
 }
 
@@ -526,7 +505,7 @@ func (p *genericToolPage) HandleKey(key string) bool {
 		}
 		p.field = editFieldInput
 		p.editing = true
-		p.optionBox.Blur()
+		p.optionForm.Blur()
 		p.input.Focus()
 	case "o":
 		if !p.hasOptions {
@@ -535,7 +514,7 @@ func (p *genericToolPage) HandleKey(key string) bool {
 		}
 		p.FocusOptions()
 		p.editing = true
-		p.optionBox.Focus()
+		p.optionForm.Focus()
 	case "a":
 		p.ApplyOutput()
 	case "z":
@@ -547,60 +526,18 @@ func (p *genericToolPage) HandleKey(key string) bool {
 	return true
 }
 
-func (p *genericToolPage) optionHeight() int {
-	if !p.hasOptions {
-		return 1
-	}
-	return 2 + len(p.tool.Options())
-}
-
 func (p *genericToolPage) stopEditing() {
 	p.editing = false
 	p.input.Blur()
-	p.optionBox.Blur()
-}
-
-func (p *genericToolPage) loadSelectedOptions() {
-	parts := make([]string, 0, len(p.tool.Options()))
-	for _, opt := range p.tool.Options() {
-		value := opt.Default
-		if value == "" && opt.Required {
-			value = ""
-		}
-		parts = append(parts, fmt.Sprintf("%s=%s", opt.Name, value))
-	}
-	p.optionBox.SetValue(strings.Join(parts, " "))
-	_ = p.parseOptions()
-}
-
-func (p *genericToolPage) optionSummary() string {
-	// 编辑结束即展示当前草稿，非法参数不静默显示上次成功的值。
-	options, err := parseOptionText(p.optionBox.Value(), p.tool.Options())
-	if err != nil {
-		if hasSecretOptions(p.tool.Options()) {
-			return "Invalid options; press o to edit"
-		}
-		return p.optionBox.Value() + " (invalid; press o to edit)"
-	}
-	parts := make([]string, 0, len(p.tool.Options()))
-	for _, opt := range p.tool.Options() {
-		value := options[opt.Name]
-		if opt.Secret {
-			if strings.TrimSpace(value) == "" {
-				value = ""
-			} else {
-				value = "<secret>"
-			}
-		}
-		parts = append(parts, fmt.Sprintf("%s=%s", opt.Name, value))
-	}
-	return strings.Join(parts, " ")
+	p.optionForm.Blur()
 }
 
 func (p *genericToolPage) parseOptions() error {
-	options, err := parseOptionText(p.optionBox.Value(), p.tool.Options())
-	if err != nil {
-		return err
+	options := p.optionForm.Values()
+	for _, opt := range p.tool.Options() {
+		if opt.Required && strings.TrimSpace(options[opt.Name]) == "" {
+			return fmt.Errorf("missing required option: %s", opt.Name)
+		}
 	}
 	p.options = options
 	return nil

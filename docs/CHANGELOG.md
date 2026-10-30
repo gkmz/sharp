@@ -8,6 +8,8 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 
 ### Added
 
+- URL Encode/Decode now supports `mode=component` for URI values such as database passwords, preserving literal plus on decode; `mode=query` remains the default.
+- Token generation now supports `format=hex|base64|base64url` with explicit raw-byte sizing; the existing 32-byte unpadded Base64URL default is unchanged.
 - Added a Ctrl+R recent-tools picker for the five most recently used actions, with persistent ID-only history, exact-action navigation without execution, and session fallback when storage is unavailable.
 
 - Lazygit-inspired TUI layout with numbered focus regions.
@@ -24,6 +26,8 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 
 ### Changed
 
+- Consolidated Convert into four explicit conversion directions, Base64 into six variant-specific actions, and Generator into Password/Token/UUID v4. Categories now has 18 selectable entries for the same 57 actions; shared workspaces preserve input, drafts and output provenance, and search/history retain exact action navigation.
+- Replaced the TUI options line with a shared form: fixed labels, individual value editors and secret masks, Tab/Shift+Tab field navigation, and Left/Right enum selection. Values accept spaces and quotes literally; per-action drafts preserve the selected field.
 - Category borders now indicate additional rows above/below. Group and current-result headings avoid repeated action labels; retained results keep their source, and execution feedback uses readable tool names.
 - Refined document heading contrast and text weight; Categories now uses readable subgroup names and right-aligned counts, with primary guidance in Input and a quieter waiting hint in Output.
 - Reworked the TUI visual hierarchy with adaptive colors, green focus borders, full-width category selection, subdued retained selections, and shortcuts without filled backgrounds.

@@ -31,7 +31,7 @@ func TestVisualCategoryNamesAndCountsFitAvailableWidth(t *testing.T) {
 			if lipgloss.Width(line) != width || !strings.HasSuffix(line, fmt.Sprint(len(c.Tabs))) {
 				t.Errorf("%s/%s at width %d: count missing or misaligned: %q", c.Category, c.Subcategory, width, line)
 			}
-			if width >= 20 && c.Subcategory == "b64rawurl" && !strings.HasPrefix(line, "  Raw Base64 URL") {
+			if width >= 20 && c.Subcategory == "b64" && !strings.HasPrefix(line, "  Base64") {
 				t.Errorf("category still displays the internal ID: %q", line)
 			}
 		}

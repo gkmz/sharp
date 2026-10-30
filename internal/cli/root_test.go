@@ -2,11 +2,106 @@ package cli
 
 import (
 	"bytes"
+	"encoding/base64"
+	"encoding/hex"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/gkmz/sharp/internal/tools"
 )
+
+func TestURLCommandModes(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"url", "encode", "a b+c"}, "a+b%2Bc"},
+		{[]string{"url", "encode", "--mode", "component", "^@#$ a+b"}, "%5E%40%23%24%20a%2Bb"},
+		{[]string{"url", "decode", "--mode=component", "a+b%2Bc"}, "a+b+c"},
+		{[]string{"url", "decode", "a+b%2Bc"}, "a b+c"},
+		{[]string{"url", "encode", "--mode=component", "--", "--password"}, "--password"},
+		{[]string{"url", "encode", "--", "--mode=component"}, "--mode%3Dcomponent"},
+	} {
+		cmd := NewRootCommand(tools.NewRegistry())
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs(tc.args)
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("%v: %v", tc.args, err)
+		}
+		if got := out.String(); got != tc.want+"\n" {
+			t.Fatalf("%v = %q, want %q", tc.args, got, tc.want)
+		}
+	}
+}
+
+func TestTokenCommandFormats(t *testing.T) {
+	for _, n := range []int{32, 64} {
+		for _, format := range []string{"hex", "base64", "base64url"} {
+			cmd := NewRootCommand(tools.NewRegistry())
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+			cmd.SetArgs([]string{"token", "--bytes", strconv.Itoa(n), "--format", format, ""})
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			value := strings.TrimSuffix(out.String(), "\n")
+			var decoded []byte
+			var err error
+			switch format {
+			case "hex":
+				decoded, err = hex.DecodeString(value)
+			case "base64":
+				decoded, err = base64.StdEncoding.Strict().DecodeString(value)
+			case "base64url":
+				decoded, err = base64.RawURLEncoding.Strict().DecodeString(value)
+			}
+			if err != nil || len(decoded) != n || strings.Count(out.String(), "\n") != 1 {
+				t.Fatalf("%s/%d: decoded bytes=%d, error=%v", format, n, len(decoded), err)
+			}
+		}
+	}
+}
+
+func TestURLTokenCommandHelpAndInvalidOptions(t *testing.T) {
+	for _, tc := range []struct{ args, want []string }{
+		{[]string{"url", "encode", "--help"}, []string{"--mode", "component", "query"}},
+		{[]string{"url", "decode", "--help"}, []string{"--mode", "literal +"}},
+		{[]string{"token", "--help"}, []string{"--bytes", "--format", "base64url", "padding", "output characters"}},
+	} {
+		cmd := NewRootCommand(tools.NewRegistry())
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetArgs(tc.args)
+		if err := cmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range tc.want {
+			if !strings.Contains(out.String(), want) {
+				t.Fatalf("help for %v omits %q", tc.args, want)
+			}
+		}
+	}
+	for _, args := range [][]string{
+		{"url", "encode", "--mode=bad", "secret"},
+		{"url", "decode", "--mode=bad", "secret"},
+		{"url", "decode", "--mode=component", "%GG"},
+		{"token", "--format=bad", ""},
+		{"token", "--format=hex", "--bytes=4097", ""},
+	} {
+		cmd := NewRootCommand(tools.NewRegistry())
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&out)
+		cmd.SetArgs(args)
+		if err := cmd.Execute(); err == nil || out.Len() != 0 {
+			t.Fatalf("invalid %v: error=%v, output=%q", args, err, out.String())
+		}
+	}
+}
 
 func TestHelpIncludesLogo(t *testing.T) {
 	cmd := NewRootCommand(tools.NewRegistry())

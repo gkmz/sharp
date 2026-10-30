@@ -122,7 +122,7 @@ func TestGenericToolPageShowsOptionsWithoutInput(t *testing.T) {
 	if strings.Contains(view, "Input") {
 		t.Fatalf("View() = %q, should hide Input for password generator", view)
 	}
-	if !strings.Contains(view, "Options") || !strings.Contains(view, "length=24") {
+	if !strings.Contains(view, "Options") || !strings.Contains(view, "length = 24") {
 		t.Fatalf("View() = %q, want options block", view)
 	}
 }
@@ -139,7 +139,7 @@ func TestGenericToolPageValidatesRequiredOptions(t *testing.T) {
 			return tool.Output{}, nil
 		},
 	})
-	page.optionBox.SetValue("key=")
+	setOptionValues(page, tool.Options{"key": ""})
 	page.Run()
 
 	if got := page.OutputText(); !strings.Contains(got, "missing required option: key") {
@@ -150,7 +150,7 @@ func TestGenericToolPageValidatesRequiredOptions(t *testing.T) {
 	}
 }
 
-func TestGenericToolPageParsesQuotedOptionValues(t *testing.T) {
+func TestGenericToolPageAcceptsLiteralOptionValues(t *testing.T) {
 	page := newGenericToolPage(tool.SimpleTool{
 		IDValue:          "regex.replace",
 		NameValue:        "Regex Replace",
@@ -164,31 +164,11 @@ func TestGenericToolPageParsesQuotedOptionValues(t *testing.T) {
 			return tool.Output{Text: options["replacement"]}, nil
 		},
 	})
-	page.optionBox.SetValue(`pattern=\d+ replacement="hello world"`)
+	setOptionValues(page, tool.Options{"pattern": `\d+`, "replacement": "hello world"})
 	page.Run()
 
 	if got, want := page.OutputText(), "hello world"; got != want {
 		t.Fatalf("OutputText() = %q, want %q", got, want)
-	}
-}
-
-func TestGenericToolPageRejectsUnknownOptions(t *testing.T) {
-	page := newGenericToolPage(tool.SimpleTool{
-		IDValue:          "password",
-		NameValue:        "Random Password",
-		CategoryValue:    tool.CategoryGenerator,
-		DescriptionValue: "generate password",
-		OptionsValue:     []tool.Option{{Name: "length", Description: "Password length", Default: "24"}},
-		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			t.Fatal("RunFunc should not be called when an unknown option is present")
-			return tool.Output{}, nil
-		},
-	})
-	page.optionBox.SetValue("length=12 typo=1")
-	page.Run()
-
-	if got := page.OutputText(); !strings.Contains(got, "unknown option: typo") {
-		t.Fatalf("OutputText() = %q, want unknown option error", got)
 	}
 }
 
@@ -203,15 +183,15 @@ func TestGenericToolPageMasksSecretOptionsInNormalView(t *testing.T) {
 			return tool.Output{Text: options["key"]}, nil
 		},
 	})
-	page.optionBox.SetValue("key=secret")
+	setOptionValues(page, tool.Options{"key": "secret"})
 	page.SetSize(60, 14)
 	page.Run()
 
 	view := stripANSI(page.View())
-	if strings.Contains(view, "key=secret") {
+	if strings.Contains(view, "key = secret") {
 		t.Fatalf("View() = %q, should not expose secret option value", view)
 	}
-	if !strings.Contains(view, "key=<secret>") {
+	if !strings.Contains(view, "key = <secret>") {
 		t.Fatalf("View() = %q, want masked secret option", view)
 	}
 }

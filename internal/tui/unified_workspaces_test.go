@@ -114,19 +114,19 @@ func TestUnifiedWorkspaceOptionDraftsFollowAction(t *testing.T) {
 	selectWorkspaceTool(t, &m, "regex.test")
 	p := m.currentPage().(*genericToolPage)
 	p.SetInput("hello world")
-	p.optionBox.SetValue(`pattern="hello world"`)
+	setOptionValues(p, tool.Options{"pattern": "hello world"})
 	selectWorkspaceTool(t, &m, "regex.replace")
 	replace := m.currentPage().(*genericToolPage)
-	replace.optionBox.SetValue(`pattern=world replacement=sharp`)
+	setOptionValues(replace, tool.Options{"pattern": "world", "replacement": "sharp"})
 	selectWorkspaceTool(t, &m, "regex.test")
 	p = m.currentPage().(*genericToolPage)
-	if p.optionBox.Value() != `pattern="hello world"` {
-		t.Fatalf("Match draft=%q", p.optionBox.Value())
+	if p.optionForm.Values()["pattern"] != "hello world" {
+		t.Fatalf("Match draft=%q", p.optionForm.Values())
 	}
 	selectWorkspaceTool(t, &m, "regex.replace")
 	p = m.currentPage().(*genericToolPage)
-	if p.optionBox.Value() != `pattern=world replacement=sharp` {
-		t.Fatalf("Replace draft=%q", p.optionBox.Value())
+	if p.optionForm.Values()["pattern"] != "world" || p.optionForm.Values()["replacement"] != "sharp" {
+		t.Fatalf("Replace draft=%q", p.optionForm.Values())
 	}
 	m.focus = focusWorkspace
 	m = workflowKey(m, "o")
@@ -188,7 +188,7 @@ func TestUnifiedWorkspaceGeneratorsNeedExplicitRun(t *testing.T) {
 	m := workflowModel(tool.CategoryGenerator)
 	selectWorkspaceTool(t, &m, "password")
 	p := m.currentPage().(*genericToolPage)
-	p.optionBox.SetValue("length=8")
+	setOptionValues(p, tool.Options{"length": "8"})
 	p.Run()
 	original := p.OutputText()
 	m.focus = focusTabs
@@ -196,9 +196,9 @@ func TestUnifiedWorkspaceGeneratorsNeedExplicitRun(t *testing.T) {
 	if m.currentPage() != p || p.OutputText() != original {
 		t.Fatal("generator switch should preserve output without generating")
 	}
-	p.optionBox.SetValue("bytes=12")
+	setOptionValues(p, tool.Options{"bytes": "12"})
 	selectWorkspaceTool(t, &m, "password")
-	if p.optionBox.Value() != "length=8" {
+	if p.optionForm.Values()["length"] != "8" {
 		t.Fatal("password settings lost on action switch")
 	}
 	m.focus = focusWorkspace
@@ -214,11 +214,11 @@ func TestUnifiedWorkspaceSecretDraftsStayMasked(t *testing.T) {
 	selectWorkspaceTool(t, &m, "hmac.sha256")
 	p := m.currentPage().(*genericToolPage)
 	p.SetInput("message")
-	p.optionBox.SetValue("key=do-not-show-this")
+	setOptionValues(p, tool.Options{"key": "do-not-show-this"})
 	selectWorkspaceTool(t, &m, "hmac.sha512")
 	selectWorkspaceTool(t, &m, "hmac.sha256")
 	p = m.currentPage().(*genericToolPage)
-	if p.optionBox.Value() != "key=do-not-show-this" {
+	if p.optionForm.Values()["key"] != "do-not-show-this" {
 		t.Fatal("secret draft was not restored in memory")
 	}
 	m.focus = focusWorkspace
@@ -232,21 +232,21 @@ func TestUnifiedWorkspaceSecretDraftsStayMasked(t *testing.T) {
 	}
 }
 
-func TestUnifiedWorkspaceMalformedSecretOptionsStayMasked(t *testing.T) {
+func TestUnifiedWorkspaceLiteralSecretOptionsStayMasked(t *testing.T) {
 	for _, draft := range []string{"key=secret unquoted-secret-tail", "key=secret unquoted-secret-tail=value"} {
 		m := workflowModel(tool.CategoryCrypto)
 		selectWorkspaceTool(t, &m, "hmac.sha256")
 		p := m.currentPage().(*genericToolPage)
 		p.SetInput("message")
-		p.optionBox.SetValue(draft)
+		setOptionValues(p, tool.Options{"key": draft})
 		m.focus = focusWorkspace
 		m = workflowKey(m, "o")
 		m = workflowKey(m, "enter")
-		if !p.outputErr || p.IsEditing() {
-			t.Fatal("malformed options must fail and leave editing")
+		if p.outputErr || p.IsEditing() {
+			t.Fatal("literal secret values must run and leave editing")
 		}
 		if strings.Contains(stripANSI(m.View())+p.OutputText(), "unquoted-secret-tail") {
-			t.Fatal("option parser error exposed secret fragments")
+			t.Fatal("form exposed secret fragments")
 		}
 	}
 }
@@ -303,9 +303,9 @@ func TestUnifiedWorkspaceOptionsSummaryShowsCurrentDraft(t *testing.T) {
 	p := m.currentPage().(*genericToolPage)
 	m.focus = focusWorkspace
 	m = workflowKey(m, "o")
-	p.optionBox.SetValue(`pattern=hello replacement=sharp`)
+	setOptionValues(p, tool.Options{"pattern": "hello", "replacement": "sharp"})
 	m = workflowKey(m, "esc")
-	if !strings.Contains(stripANSI(p.View()), "replacement=sharp") {
+	if !strings.Contains(stripANSI(p.View()), "replacement = sharp") {
 		t.Fatal("normal Options view shows stale values after editing")
 	}
 }
@@ -345,7 +345,7 @@ func TestUnifiedWorkspaceRootParamEnterMatchesJSON(t *testing.T) {
 	m = workflowKey(m, "esc")
 	m = workflowKey(m, "o")
 	p := m.currentPage().(*genericToolPage)
-	p.optionBox.SetValue("pattern=hello replacement=sharp")
+	setOptionValues(p, tool.Options{"pattern": "hello", "replacement": "sharp"})
 	m = workflowKey(m, "enter")
 	if m.currentPage().IsEditing() || m.currentPage().OutputText() != "sharp" {
 		t.Fatal("shared run/edit contract differs from JSON")

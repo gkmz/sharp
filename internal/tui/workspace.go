@@ -60,11 +60,11 @@ func (p *workspacePreview) title(action, selectedAction string) string {
 	return title
 }
 
-// 两种页面使用同一尺寸预算，参数只占一行内容，其余空间分配给文档。
-func workspaceSizes(width, height int, hasInput, hasOptions bool) (pageWidth, inputH, optionsH, outputH int) {
+// Reserve one row per option; the remaining space belongs to the document.
+func workspaceSizes(width, height int, hasInput bool, optionRows int) (pageWidth, inputH, optionsH, outputH int) {
 	pageWidth = max(8, width)
-	if hasOptions {
-		optionsH = 3
+	if optionRows > 0 {
+		optionsH = 2 + optionRows
 	}
 	remaining := max(3, height-optionsH)
 	if hasInput {

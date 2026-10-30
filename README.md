@@ -72,7 +72,17 @@ The TUI has three numbered regions:
 
 There is no permanent search box. In Categories, type `json`, `minify`, or another tool name to filter immediately. Use Up/Down to select a result, Enter to open it, and Esc to clear the filter. A single tool opens directly in the workspace. Opening a result clears the filter and restores its full action group. `/` starts search from other regions outside edit mode. Letters such as `j`, `k`, and `q` are search text in Categories.
 
-All tool groups use the same workspace rules. Actions within a group share input, output, and input undo history: Base64 Encode/Decode, text transformations, hash algorithms, and regex Match/Replace all keep the current document when switching. Each action remembers its own options in memory; unrelated categories and subgroups keep separate documents. Output titles identify the action that produced the result.
+Related tools share a Categories entry, with concrete operations in Actions:
+
+| Categories entry | Actions |
+| --- | --- |
+| `Convert` | JSON→YAML, YAML→JSON, CSV→JSON, Headers→JSON |
+| `Encode → Base64` | Standard Encode/Decode, URL Encode/Decode, Raw URL Encode/Decode |
+| `Generator` | Password, Token, UUID v4 |
+
+This keeps 57 actions available through 18 selectable entries. Conversion directions and Base64 variants stay visible in Actions. Switching conversion actions preserves Input; use `p` to apply a result before converting it back. If Input does not match the selected conversion, the previous preview remains marked `stale` with its source action. Generator actions share the result area and remember their own options; switching between Password, Token and UUID never generates a new value. Existing CLI commands, search names, and recent-tool IDs still locate the concrete actions.
+
+All tool groups use the same workspace rules. Actions within a group share input, output, and input undo history: format conversions, Base64 variants, text transformations, hash algorithms, and regex Match/Replace all keep the current document when switching. Each action remembers its own options in memory; unrelated categories and subgroups keep separate documents. Output titles identify the action that produced the result.
 
 Press `Ctrl+R` (`^R` in the footer) in Normal mode to open the five most recently used tool actions. Use Up/Down and Enter to open the exact action in Workspace, or Esc to return. Opening a recent tool restores its complete action group without running it. Successful runs and valid previews after pasting/editing update the list; browsing actions, opening search results, and failed previews do not. History survives restarts and stores only tool IDs, never input, output, or options, in `sharp/recent-tools.json` under the OS user configuration directory (`~/Library/Application Support` on macOS, `$XDG_CONFIG_HOME` or `~/.config` on Linux). If storage is unavailable, history still works for the current session.
 
@@ -84,7 +94,7 @@ Green borders identify the focused region; blue marks the active selection and a
 
 JSON follows the same rules with Pretty, Minify, Sort, Query, Escape, Unescape, and Check. Path appears only for Query; Enter in Path queries the shared input. Check reports validation in the status line. Across all groups, `p`/`a` applies a successful result to Input and clears Output; errors cannot be applied. While input or options are incomplete, the previous result stays visible as `stale`; copy, save, and Apply are blocked until a fresh result is available.
 
-Input and Output do not need to be selected. Press `i` to edit Input directly, or `o` for Options/Path. Enter inserts a newline in Input; in Options/Path it executes and returns to Normal. While editing, letters are text and Tab does not navigate; use Esc first. In Normal mode, arrows in Workspace scroll Output. Tool options use `key=value` pairs; quote values containing spaces, for example `replacement="hello world"`. Secret options, such as HMAC keys, are masked. `?` lists available commands and option descriptions. Operation feedback appears above the shortcut hints.
+Input and Output do not need to be selected. Press `i` to edit Input directly, or `o` for Options/Path. Enter inserts a newline in Input; in Options/Path it executes and returns to Normal. Options use a form with fixed parameter labels and one editable value per row. Tab/Shift+Tab moves between option fields; Left/Right selects enumerated values such as URL mode or token format. Text values accept spaces, quotes, backslashes, and `=` literally, with no extra quoting. Secret fields, such as HMAC keys, are masked individually. Tab stays in the form; use Esc before switching regions. In Input, Tab does not navigate. In Normal mode, arrows in Workspace scroll Output. `?` lists available commands and option descriptions. Operation feedback appears above the shortcut hints.
 
 Common shortcuts outside edit mode:
 
@@ -146,19 +156,45 @@ sharp jwt decode "$JWT"
 
 CLI input can come from an argument, a file path, or stdin.
 
+### URL values and random tokens
+
+URL Encode/Decode is under **Encode → URL**. The default `mode=query` uses form/query rules: space becomes `+`, and decoding `+` produces a space. Choose `mode=component` for individual URI values such as a database connection password: only letters, digits, and `-._~` remain unescaped, space becomes `%20`, and decoding preserves literal `+`. Encode the password value before inserting it into the connection URI.
+
+```bash
+sharp url encode --mode component '^@#$ a+b'
+# %5E%40%23%24%20a%2Bb
+sharp url decode --mode component 'a+b%2Bc'
+# a+b+c
+```
+
+Token remains under **Generator → Token**. `bytes` specifies random bytes before encoding, from 1 to 4096; it does not specify output characters. `format=hex` uses lowercase, `format=base64` uses standard Base64 with padding, and `format=base64url` uses URL-safe Base64 without padding. Defaults remain `bytes=32 format=base64url`. All formats use `crypto/rand` and return a single line.
+
+```bash
+sharp token --bytes 32 --format hex
+sharp token --bytes 64 --format base64
+sharp token --bytes 32 --format base64url
+```
+
+| Random bytes | Hex characters | Base64 characters | Base64URL characters |
+| --- | ---: | ---: | ---: |
+| 32 | 64 | 44 | 43 |
+| 64 | 128 | 88 | 86 |
+
+In the TUI, press `o` to edit the Options form. For URL, select `component` with Left/Right. For Token, edit the `bytes` value, press Tab to select `format`, then use Left/Right to choose `hex`, `base64`, or `base64url`. Parameter names are fixed; only values can change. URL input/options support live previews. For Token, Enter in Options generates a result and returns to Normal; Esc keeps the draft without generating. `r` generates explicitly and `y` copies the result. Each action retains its own option draft during the session.
+
 ## Tool Categories
 
 | Category | Tools |
 | --- | --- |
 | ![JSON](https://img.shields.io/badge/JSON-workbench-2EA44F) | `pretty`, `minify`, `validate`, `get`, `sort`, `escape`, `unescape` |
-| ![Encode](https://img.shields.io/badge/Encode-code-blue) | Base64, Base64 URL, raw Base64 URL, URL, Hex, HTML, Unicode |
+| ![Encode](https://img.shields.io/badge/Encode-code-blue) | Base64, Base64 URL, raw Base64 URL, URL (query/component), Hex, HTML, Unicode |
 | ![Crypto](https://img.shields.io/badge/Crypto-hash-critical) | CRC32, MD5, SHA1, SHA224, SHA256, SHA384, SHA512, HMAC SHA256, HMAC SHA512 |
 | ![Time](https://img.shields.io/badge/Time-timestamp-yellow) | current time, timestamp to time, time to timestamp |
 | ![Text](https://img.shields.io/badge/Text-transform-informational) | uppercase, lowercase, trim, case conversion, sort, unique, count, regex test, regex replace |
 | ![Network](https://img.shields.io/badge/Network-parse-9cf) | URL parse, query parse, DNS lookup, CIDR parse |
 | ![Convert](https://img.shields.io/badge/Convert-format-success) | JSON to YAML, YAML to JSON, CSV to JSON, HTTP headers to JSON |
 | ![Inspector](https://img.shields.io/badge/Inspector-JWT-lightgrey) | JWT decode without signature verification |
-| ![Generator](https://img.shields.io/badge/Generator-random-orange) | UUID v4, random password, random token |
+| ![Generator](https://img.shields.io/badge/Generator-random-orange) | UUID v4, random password, random token (Hex/Base64/Base64URL) |
 
 ## Tool Roadmap
 

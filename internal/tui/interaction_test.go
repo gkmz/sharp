@@ -84,8 +84,8 @@ func TestInteractionInsertIdentifiesFieldAndKeepsCommandsAsText(t *testing.T) {
 			case *genericToolPage:
 				value = func() string { return page.input.Value() }
 				if tc.target == "Options" {
-					page.optionBox.SetValue("")
-					value = func() string { return page.optionBox.Value() }
+					setOptionValues(page, tool.Options{"pattern": ""})
+					value = func() string { return page.optionForm.Values()["pattern"] }
 				}
 			}
 			for _, key := range []string{"x", "y", "p", "r", "[", "]", "1", "2", "3", "?"} {
@@ -117,7 +117,7 @@ func TestInteractionParameterSubmitReturnsToNormal(t *testing.T) {
 				page.pathBox.SetValue("name")
 			case *genericToolPage:
 				page.SetInput("hello")
-				page.optionBox.SetValue("pattern=hello replacement=sharp")
+				setOptionValues(page, tool.Options{"pattern": "hello", "replacement": "sharp"})
 			}
 			m.focus = focusWorkspace
 			m = workflowKey(m, "o")

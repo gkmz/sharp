@@ -113,19 +113,27 @@ func (m *model) openSelection() {
 
 var jsonActionOrder = []string{"json.pretty", "json.minify", "json.sort", "json.get", "json.escape", "json.unescape", "json.validate"}
 
-func orderJSONActions(tabs []tabItem) {
-	rank := func(id string) int {
-		for i, item := range jsonActionOrder {
-			if item == id {
-				return i
+func orderToolActions(tabs []tabItem) {
+	rank := func(t tool.Tool) int {
+		if group, index := consolidatedGroup(t); group != nil {
+			return index
+		}
+		if t.Category() == tool.CategoryJSON {
+			for i, id := range jsonActionOrder {
+				if t.ID() == id {
+					return i
+				}
 			}
 		}
 		return len(jsonActionOrder)
 	}
-	sort.SliceStable(tabs, func(i, j int) bool { return rank(tabs[i].Tool.ID()) < rank(tabs[j].Tool.ID()) })
+	sort.SliceStable(tabs, func(i, j int) bool { return rank(tabs[i].Tool) < rank(tabs[j].Tool) })
 }
 
 func actionLabel(t tool.Tool) string {
+	if group, index := consolidatedGroup(t); group != nil {
+		return group.actions[index].label
+	}
 	if label, ok := commonActionLabels[t.ID()]; ok {
 		return label
 	}
@@ -191,9 +199,6 @@ func canPreview(t tool.Tool) bool {
 }
 
 var commonActionLabels = map[string]string{
-	"b64.encode": "Encode", "b64.decode": "Decode",
-	"b64url.encode": "Encode", "b64url.decode": "Decode",
-	"b64rawurl.encode": "Encode", "b64rawurl.decode": "Decode",
 	"url.encode": "Encode", "url.decode": "Decode", "url.parse": "Parse",
 	"hex.encode": "Encode", "hex.decode": "Decode",
 	"html.escape": "Escape", "html.unescape": "Unescape",
@@ -202,8 +207,7 @@ var commonActionLabels = map[string]string{
 	"regex.test": "Match", "regex.replace": "Replace",
 	"time.now": "Now", "time.from": "From timestamp", "time.parse": "To timestamp",
 	"query.parse": "Parse", "dns.lookup": "Lookup", "cidr.parse": "Parse",
-	"json.to_yaml": "To YAML", "yaml.to_json": "To JSON", "csv.to_json": "To JSON", "headers.to_json": "To JSON",
-	"jwt.decode": "Decode", "password": "Password", "token": "Token",
+	"jwt.decode": "Decode",
 }
 
 func workspaceGroupTitle(t tool.Tool) string {

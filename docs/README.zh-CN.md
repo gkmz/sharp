@@ -72,7 +72,17 @@ TUI 分为三个带数字快捷键的区域：
 
 搜索框不再常驻。在 Categories 直接输入 `json`、`minify` 或工具名即可搜索，用上下方向键选择结果，Enter 打开，Esc 清空筛选。只有一个工具时直接进入工作区；打开结果后清空筛选，恢复该组全部动作。在其他区域的非编辑状态下，可按 `/` 开始搜索。Categories 中的 `j`、`k`、`q` 等字母均作为搜索文字。
 
-所有工具组采用同一套工作台规则。组内动作共享输入、输出和输入撤销记录：Base64 编码/解码、文本转换、哈希算法、正则匹配/替换切换时都会保留当前文档。每个动作在内存中分别保留参数草稿；不同类目和子类目之间的文档相互独立。输出标题注明生成结果的动作。
+相关工具共用 Categories 入口，具体操作在 Actions 中切换：
+
+| Categories 入口 | Actions 动作 |
+| --- | --- |
+| `Convert` | JSON→YAML、YAML→JSON、CSV→JSON、Headers→JSON |
+| `Encode → Base64` | Standard Encode/Decode、URL Encode/Decode、Raw URL Encode/Decode |
+| `Generator` | Password、Token、UUID v4 |
+
+57 个动作收敛到 18 个可选入口，转换方向和 Base64 变体在区域 2 中明确显示。切换转换动作会保留 Input；反向转换前先用 `p` 应用结果。输入格式与所选转换不匹配时，保留旧预览并标记 `stale`，同时注明结果来源。Password、Token、UUID 共用结果区，各自保留参数；切换不会生成新值。原有 CLI 命令、搜索名称和最近记录中的工具 ID 仍可定位具体动作。
+
+所有工具组采用同一套工作台规则。组内动作共享输入、输出和输入撤销记录：格式转换、Base64 变体、文本转换、哈希算法、正则匹配/替换切换时都会保留当前文档。每个动作在内存中分别保留参数草稿；不同类目和子类目之间的文档相互独立。输出标题注明生成结果的动作。
 
 在 Normal 模式按 `Ctrl+R`（底栏显示为 `^R`）打开最近使用的 5 个工具动作。上下方向键选择，Enter 直接进入对应工作台，Esc 返回；打开时保留完整动作组，不自动执行。成功运行、粘贴或编辑后的有效预览会更新记录；浏览动作、打开搜索结果和失败预览不会计入。历史跨重启保留，只存工具 ID，不保存输入、输出或参数。文件位于系统用户配置目录下的 `sharp/recent-tools.json`：macOS 为 `~/Library/Application Support`，Linux 为 `$XDG_CONFIG_HOME` 或 `~/.config`。无法读写文件时仍可使用本次会话的历史。
 
@@ -84,7 +94,7 @@ Normal 模式处理命令与导航，只有 `i` 或 `o` 才进入编辑。Tab/Sh
 
 JSON 使用相同规则，提供 Pretty、Minify、Sort、Query、Escape、Unescape、Check。仅 Query 显示 Path，在路径中按 Enter 查询共用输入；Check 在状态行显示校验结果。所有工具组的 `p`/`a` 都将成功结果应用回 Input 并清空 Output，错误信息不能回填输入。输入或参数尚未完整时，旧结果保留并标记为 `stale`，更新完成前无法复制、保存或应用。
 
-Input 和 Output 无需单独选中。`i` 直接编辑 Input，`o` 编辑 Options/Path。在 Input 中 Enter 换行；在参数中 Enter 执行并返回 Normal。编辑时字母只作为文本，Tab 不切换区域，需要先按 Esc；Normal 模式下 Workspace 的上下方向键直接滚动 Output。工具参数使用 `key=value`，带空格的值需要加引号，例如 `replacement="hello world"`。HMAC key 等敏感参数会遮蔽显示。按 `?` 查看命令和参数说明。操作反馈显示在底部快捷键提示的上方。
+Input 和 Output 无需单独选中。`i` 直接编辑 Input，`o` 编辑 Options/Path。在 Input 中 Enter 换行；在参数中 Enter 执行并返回 Normal。Options 使用逐项表单：每个参数独占一行，参数名固定，只能编辑右侧的值。Tab/Shift+Tab 在参数间切换；URL mode、Token format 等枚举值用左右方向键选择。文本值中的空格、引号、反斜线和 `=` 都可以原样输入，无需额外加引号。HMAC key 等敏感字段单独遮罩。Tab 只在表单内部切换，按 Esc 后才能切换区域；Input 编辑时 Tab 不导航。Normal 模式下 Workspace 的上下方向键直接滚动 Output。按 `?` 查看命令和参数说明。操作反馈显示在底部快捷键提示的上方。
 
 非编辑状态下的常用快捷键：
 
@@ -146,19 +156,45 @@ sharp jwt decode "$JWT"
 
 CLI 输入支持参数、文件路径或 stdin。
 
+### URL 值编码和随机 Token
+
+URL Encode/Decode 位于 **Encode → URL**。默认 `mode=query` 使用表单/查询参数规则：空格编码成 `+`，解码时 `+` 变成空格。数据库连接密码等单个 URI 值使用 `mode=component`：只保留字母、数字和 `-._~`，空格编码成 `%20`，解码时保留字面量 `+`。先编码密码本身，再填入连接 URI。
+
+```bash
+sharp url encode --mode component '^@#$ a+b'
+# %5E%40%23%24%20a%2Bb
+sharp url decode --mode component 'a+b%2Bc'
+# a+b+c
+```
+
+Token 位于 **Generator → Token**。`bytes` 表示编码前的随机字节数，范围 1–4096，并非输出字符数。`format=hex` 输出小写十六进制，`format=base64` 输出带填充的标准 Base64，`format=base64url` 输出无填充的 URL 安全 Base64。默认保持 `bytes=32 format=base64url`，所有格式均使用 `crypto/rand`，结果为单行文本。
+
+```bash
+sharp token --bytes 32 --format hex
+sharp token --bytes 64 --format base64
+sharp token --bytes 32 --format base64url
+```
+
+| 随机字节数 | Hex 字符数 | Base64 字符数 | Base64URL 字符数 |
+| --- | ---: | ---: | ---: |
+| 32 | 64 | 44 | 43 |
+| 64 | 128 | 88 | 86 |
+
+TUI 中按 `o` 进入 Options 表单。URL 用左右键选择 `component`；Token 修改 `bytes` 右侧的字节数，按 Tab 到 `format`，用左右键选择 `hex`、`base64` 或 `base64url`。参数名固定，只能修改值。URL 的输入和参数支持即时预览；Token 在 Options 按 Enter 生成并返回 Normal，Esc 仅保留参数草稿，不生成。`r` 显式生成，`y` 复制结果。每个动作在本次会话中分别保留参数草稿。
+
 ## 工具分类
 
 | 类目 | 工具 |
 | --- | --- |
 | ![JSON](https://img.shields.io/badge/JSON-workbench-2EA44F) | 美化、压缩、校验、查询、排序、转义、反转义 |
-| ![Encode](https://img.shields.io/badge/Encode-code-blue) | Base64、Base64 URL、Raw Base64 URL、URL、Hex、HTML、Unicode |
+| ![Encode](https://img.shields.io/badge/Encode-code-blue) | Base64、Base64 URL、Raw Base64 URL、URL（query/component）、Hex、HTML、Unicode |
 | ![Crypto](https://img.shields.io/badge/Crypto-hash-critical) | CRC32、MD5、SHA1、SHA224、SHA256、SHA384、SHA512、HMAC SHA256、HMAC SHA512 |
 | ![Time](https://img.shields.io/badge/Time-timestamp-yellow) | 当前时间、时间戳转时间、时间转时间戳 |
 | ![Text](https://img.shields.io/badge/Text-transform-informational) | 大小写、trim、命名风格转换、排序、去重、统计、正则测试、正则替换 |
 | ![Network](https://img.shields.io/badge/Network-parse-9cf) | URL 解析、Query 解析、DNS 查询、CIDR 解析 |
 | ![Convert](https://img.shields.io/badge/Convert-format-success) | JSON 转 YAML、YAML 转 JSON、CSV 转 JSON、HTTP Headers 转 JSON |
 | ![Inspector](https://img.shields.io/badge/Inspector-JWT-lightgrey) | JWT 解码，不校验签名 |
-| ![Generator](https://img.shields.io/badge/Generator-random-orange) | UUID v4、随机密码、随机 token |
+| ![Generator](https://img.shields.io/badge/Generator-random-orange) | UUID v4、随机密码、随机 Token（Hex/Base64/Base64URL） |
 
 ## 工具扩展待办
 
