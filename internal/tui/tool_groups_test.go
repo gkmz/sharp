@@ -190,6 +190,7 @@ func TestConsolidatedSearchAndRecentRestoreCompleteGroups(t *testing.T) {
 		for _, id := range tc.ids {
 			t.Run(id, func(t *testing.T) {
 				m := workflowModel(tool.CategoryJSON)
+				m = workflowKey(m, "s")
 				m = workflowKey(m, id)
 				m = workflowKey(m, "enter")
 				if m.currentTab().Tool.ID() != id || m.focus != focusWorkspace || len(m.currentCategory().Tabs) != len(tc.ids) {
@@ -210,6 +211,7 @@ func TestConsolidatedSearchAndRecentRestoreCompleteGroups(t *testing.T) {
 	}
 	for _, query := range []string{"Base64 URL", "Raw Base64 URL", "random", "CSV to JSON", "HTTP Headers"} {
 		m := workflowModel(tool.CategoryJSON)
+		m = workflowKey(m, "s")
 		m = workflowKey(m, query)
 		if m.currentTab() == nil {
 			t.Errorf("old search alias %q no longer finds a tool", query)

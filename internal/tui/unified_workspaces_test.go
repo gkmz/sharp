@@ -391,6 +391,7 @@ func TestUnifiedWorkspaceSearchReturnsToSharedTextInput(t *testing.T) {
 	p := m.currentPage().(*genericToolPage)
 	p.SetInput("Hello")
 	m.focus = focusCategories
+	m = workflowKey(m, "s")
 	m = workflowKey(m, "text.lower")
 	m = workflowKey(m, "enter")
 	m = workflowKey(m, "r")

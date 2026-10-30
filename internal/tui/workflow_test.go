@@ -62,8 +62,9 @@ func selectWorkflowAction(t *testing.T, m *model, id string) {
 	t.Fatalf("missing action %s", id)
 }
 
-func TestWorkflowCategoryTypeToSearch(t *testing.T) {
+func TestWorkflowCategoryExplicitSearch(t *testing.T) {
 	m := workflowModel(tool.CategoryConvert)
+	m = workflowKey(m, "s")
 	for _, key := range []string{"j", "s", "o", "n"} {
 		m = workflowKey(m, key)
 	}
@@ -91,9 +92,10 @@ func TestWorkflowSearchFirstLetterDoesNotNavigateOrQuit(t *testing.T) {
 	for _, letter := range []string{"j", "k", "q"} {
 		t.Run(letter, func(t *testing.T) {
 			m := workflowModel(tool.CategoryText)
+			m = workflowKey(m, "s")
 			m = workflowKey(m, letter)
 			if m.search.Value() != letter || m.focus != focusSearch {
-				t.Fatalf("%s did not start search", letter)
+				t.Fatalf("%s was not treated as search text", letter)
 			}
 		})
 	}
@@ -127,6 +129,7 @@ func TestWorkflowSearchRunsMatchingJSONAction(t *testing.T) {
 	p := m.currentPage().(*jsonToolPage)
 	p.SetInput("{\n \"x\": 1\n}")
 	m.focus = focusCategories
+	m = workflowKey(m, "s")
 	m = workflowKey(m, "minify")
 	m = workflowKey(m, "enter")
 	m = workflowKey(m, "r")
@@ -279,6 +282,7 @@ func TestWorkflowJSONActionPreviewAndHiddenPathFocus(t *testing.T) {
 
 func TestWorkflowSearchBackspaceAndNoResults(t *testing.T) {
 	m := workflowModel(tool.CategoryJSON)
+	m = workflowKey(m, "s")
 	m = workflowKey(m, "not-a-real-tool-987")
 	if len(m.categories) != 0 {
 		t.Fatal("expected empty results")
@@ -292,10 +296,11 @@ func TestWorkflowSearchBackspaceAndNoResults(t *testing.T) {
 	if len(m.categories) == 0 {
 		t.Fatal("clearing an empty search did not restore tools")
 	}
+	m = workflowKey(m, "s")
 	m = workflowKey(m, "j")
 	m = workflowKey(m, "backspace")
-	if m.focus != focusCategories || m.search.Value() != "" {
-		t.Fatal("deleting last search character should exit search")
+	if m.focus != focusSearch || m.search.Value() != "" {
+		t.Fatal("deleting last search character should keep Search mode active")
 	}
 }
 
@@ -341,6 +346,7 @@ func TestWorkflowGenericOptionsFitWorkspace(t *testing.T) {
 
 func TestWorkflowSearchKeepsConsolidatedConvertAndStandaloneJSON(t *testing.T) {
 	m := workflowModel(tool.CategoryJSON)
+	m = workflowKey(m, "s")
 	m = workflowKey(m, "json")
 	convertRows := 0
 	for _, category := range m.categories {
@@ -366,6 +372,7 @@ func TestWorkflowSearchKeepsConsolidatedConvertAndStandaloneJSON(t *testing.T) {
 
 func TestWorkflowSearchAndHelpReceiveAsyncMessages(t *testing.T) {
 	m := workflowModel(tool.CategoryJSON)
+	m = workflowKey(m, "s")
 	m = workflowKey(m, "j")
 	selected := m.selectedCat
 	updated, cmd := m.Update(textinput.Blink())
@@ -398,6 +405,7 @@ func TestWorkflowGeneratorRootHintsMatchAvailableFields(t *testing.T) {
 
 func TestWorkflowSearchSelectionSurvivesCategoryRoundTrip(t *testing.T) {
 	m := workflowModel(tool.CategoryJSON)
+	m = workflowKey(m, "s")
 	m = workflowKey(m, "minify")
 	m = workflowKey(m, "enter")
 	m.clearCategorySearch()

@@ -345,6 +345,7 @@ func TestNormalEditorsAreOnlyHighlightedWhileEditing(t *testing.T) {
 
 func TestNormalSearchOpenRestoresActionsForBracketSwitching(t *testing.T) {
 	m := workflowModel(tool.CategoryJSON)
+	m = workflowKey(m, "s")
 	m = workflowKey(m, "pretty")
 	m = workflowKey(m, "enter")
 	if m.currentTab() == nil || m.currentTab().Tool.ID() != "json.pretty" || m.focus != focusWorkspace {

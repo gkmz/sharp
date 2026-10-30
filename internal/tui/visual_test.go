@@ -83,6 +83,7 @@ func TestVisualCategoryScrollIndicatorsDisappearWhenListFits(t *testing.T) {
 	for _, query := range []string{"", "uuid", "no-such-tool"} {
 		m := workflowModel(tool.CategoryJSON)
 		if query != "" {
+			m = workflowKey(m, "s")
 			m = workflowKey(m, query)
 		}
 		m.width, m.height = 120, 60

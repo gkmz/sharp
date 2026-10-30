@@ -9,14 +9,10 @@ import (
 )
 
 // 搜索临时占用 Categories 的一行，不引入额外导航区域。
-func (m model) startCategorySearch(first tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m model) startCategorySearch() (tea.Model, tea.Cmd) {
 	m.focus = focusSearch
 	m.searchFrom = focusCategories
 	cmd := m.search.Focus()
-	if first.Type == tea.KeyRunes {
-		m.search.SetValue(m.search.Value() + string(first.Runes))
-		m.search.CursorEnd()
-	}
 	m.applySearch()
 	return m, cmd
 }
@@ -59,10 +55,6 @@ func (m model) updateCategorySearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.search, cmd = m.search.Update(msg)
 	m.applySearch()
-	if m.search.Value() == "" {
-		m.focus = focusCategories
-		m.search.Blur()
-	}
 	return m, cmd
 }
 

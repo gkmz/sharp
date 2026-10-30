@@ -37,6 +37,7 @@ func recentKey(m model) model {
 func TestRecentRecordsSuccessfulUseNotBrowsingOrFailure(t *testing.T) {
 	m := workflowModel(tool.CategoryJSON)
 	m = workflowKey(m, "down")
+	m = workflowKey(m, "s")
 	m = workflowKey(m, "json")
 	m = workflowKey(m, "esc")
 	if len(m.recent.ids) != 0 {

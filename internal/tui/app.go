@@ -135,7 +135,7 @@ func newModel(registry *tool.Registry) model {
 		search:        search,
 		help:          help,
 		helpVP:        viewport.New(80, 20),
-		status:        "Type to search · ↑/↓ select · Enter open · Ctrl+C quit",
+		status:        "s search · j/k or ↑/↓ select · Enter open · Ctrl+C quit",
 	}
 	m.allCategories = buildCategories(registry.All())
 	m.categories = m.allCategories
@@ -217,10 +217,6 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openRecent()
 			return m, nil
 		}
-		// 分类区域的字母优先用于搜索，j/k/q 也不能先被全局命令消费。
-		if m.focus == focusCategories && msg.Type == tea.KeyRunes && !msg.Alt && key != "/" && key != "?" && key != "1" && key != "2" && key != "3" && key != "[" && key != "]" {
-			return m.startCategorySearch(msg)
-		}
 		switch key {
 		case "tab":
 			m.focus = (m.focus + 1) % 3
@@ -247,7 +243,7 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.focus = focusWorkspace
 			return m, nil
 		case "/":
-			return m.startCategorySearch(tea.KeyMsg{})
+			return m.startCategorySearch()
 		case "?":
 			m.openHelp()
 			return m, nil
@@ -255,9 +251,11 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch m.focus {
 		case focusCategories:
 			switch key {
-			case "down":
+			case "s":
+				return m.startCategorySearch()
+			case "j", "down":
 				m.moveCategory(1)
-			case "up":
+			case "k", "up":
 				m.moveCategory(-1)
 			case "enter", "right":
 				m.openSelection()
@@ -636,7 +634,7 @@ func (m model) footerLine() string {
 	case focusSearch:
 		return modeStatusLine("SEARCH", "Categories", statusHint("↑/↓", "select"), statusHint("Enter", "open"), statusHint("Esc", "clear"))
 	case focusCategories:
-		return modeStatusLine("NORMAL", "Categories", statusHint("type", "search"), statusHint("↑/↓", "select"), statusHint("Tab", "area"), statusHint("^R", "recent"), statusHint("?", "help"))
+		return modeStatusLine("NORMAL", "Categories", statusHint("s", "search"), statusHint("j/k/↑/↓", "select"), statusHint("Tab", "area"), statusHint("^R", "recent"), statusHint("?", "help"))
 	case focusTabs:
 		return modeStatusLine("NORMAL", "Actions", statusHint("←/→", "select"), statusHint("Tab", "area"), statusHint("Enter", "run"), statusHint("^R", "recent"), statusHint("?", "help"))
 	case focusWorkspace:
@@ -713,20 +711,21 @@ func (m model) helpSections() []helpSection {
 		{Key: "ctrl+r", Command: "Recent Tools", Description: "Open the five most recently used actions in Normal mode. Enter opens the workspace without running; Esc returns."},
 		{Key: "Tab/Shift+Tab", Command: "Change Area", Description: "Cycle Categories, Actions and Workspace in Normal mode; Esc leaves editing first."},
 		{Key: "[ / ]", Command: "Change Action", Description: "Select the previous/next action in the current group without changing area."},
-		{Key: "/", Command: "Search Tools", Description: "Filter tools inside Categories; typing there also starts search."},
-		{Key: "1", Command: "Categories", Description: "Focus category list; type to search, arrows to navigate."},
+		{Key: "/", Command: "Search Tools", Description: "Start search inside Categories. In Normal Categories, s also starts search; letters become text only in Search."},
+		{Key: "1", Command: "Categories", Description: "Focus category list; j/k or arrows navigate, s starts search."},
 		{Key: "2", Command: "Tools/Actions", Description: "Focus the tool or JSON action strip."},
 		{Key: "3", Command: "Workspace", Description: "Focus current workspace."},
 		{Key: "?", Command: "Help", Description: "Open or close this command help."},
-		{Key: "ctrl+c/ctrl+q", Command: "Quit", Description: "Quit from any area. q also quits outside Categories and editors."},
+		{Key: "ctrl+c/ctrl+q", Command: "Quit", Description: "Quit from any area. q also quits in Normal mode; Search and editors treat q as text."},
 		{Key: "Esc", Command: "Back", Description: "Close Help; clear search; leave Insert in Workspace; then move Workspace → Actions → Categories. Idle Categories stays put."},
 	}
 	context := make([]helpCommand, 0)
 	switch m.focus {
 	case focusCategories:
 		context = append(context,
-			helpCommand{Key: "down", Command: "Next Category", Description: "Move category selection down."},
-			helpCommand{Key: "up", Command: "Previous Category", Description: "Move category selection up."},
+			helpCommand{Key: "s", Command: "Search Tools", Description: "Enter Search mode; type a query, Enter opens the selection, Esc clears and exits."},
+			helpCommand{Key: "j/down", Command: "Next Category", Description: "Move category selection down."},
+			helpCommand{Key: "k/up", Command: "Previous Category", Description: "Move category selection up."},
 			helpCommand{Key: "Enter", Command: "Open Pages", Description: "Open tools/actions; a single tool opens directly."},
 		)
 	case focusTabs:
