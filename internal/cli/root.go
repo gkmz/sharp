@@ -14,10 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version is the semantic version printed by `sharp version`.
-// Release builds can override it with -ldflags "-X github.com/gkmz/sharp/internal/cli.Version=X.Y.Z".
-var Version = "0.0.0"
-
 const logo = `   _____ __  _____    ____  ____
   / ___// / / /   |  / __ \/ __ \
   \__ \/ /_/ / /| | / /_/ / /_/ /
@@ -72,7 +68,7 @@ func versionCommand() *cobra.Command {
 		Short: "Print version information",
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Fprintln(cmd.OutOrStdout(), logo)
-			fmt.Fprintf(cmd.OutOrStdout(), "\nversion: %s\n", Version)
+			fmt.Fprintln(cmd.OutOrStdout(), "\n"+buildVersionText())
 		},
 	}
 }

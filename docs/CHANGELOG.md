@@ -8,6 +8,7 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 
 ### Added
 
+- Added a draft-only GoReleaser release pipeline for macOS/Linux amd64/arm64 archives and SHA256 checksums, Linux/macOS verification with race tests, PR package smoke checks, build metadata, first-release notes, and bilingual release/installation guides. No version has been published yet.
 - URL Encode/Decode now supports `mode=component` for URI values such as database passwords, preserving literal plus on decode; `mode=query` remains the default.
 - Token generation now supports `format=hex|base64|base64url` with explicit raw-byte sizing; the existing 32-byte unpadded Base64URL default is unchanged.
 - Added a Ctrl+R recent-tools picker for the five most recently used actions, with persistent ID-only history, exact-action navigation without execution, and session fallback when storage is unavailable.
@@ -26,6 +27,7 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 
 ### Changed
 
+- Categories now uses j/k or arrows for Normal navigation and s to enter Search; / remains available across Normal regions. Search keeps letters literal and stays active when the query becomes empty. Updated footer/help hints; s still saves Output in Actions/Workspace.
 - Consolidated Convert into four explicit conversion directions, Base64 into six variant-specific actions, and Generator into Password/Token/UUID v4. Categories now has 18 selectable entries for the same 57 actions; shared workspaces preserve input, drafts and output provenance, and search/history retain exact action navigation.
 - Replaced the TUI options line with a shared form: fixed labels, individual value editors and secret masks, Tab/Shift+Tab field navigation, and Left/Right enum selection. Values accept spaces and quotes literally; per-action drafts preserve the selected field.
 - Category borders now indicate additional rows above/below. Group and current-result headings avoid repeated action labels; retained results keep their source, and execution feedback uses readable tool names.
@@ -41,7 +43,7 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - Parameter editing now runs on Enter across every workspace; Apply consistently clears successful output and rejects errors.
 - Workspace sizing, footer hints, group/action labels, and output provenance use shared rules.
 
-- Tool search now opens inline in Categories when typing; category navigation uses arrow keys and the permanent Search panel is removed.
+- Tool search opens inline in Categories with s or /; category navigation uses j/k or arrows and the permanent Search panel is removed.
 - TUI focus shortcuts now map to three regions: Categories (1), Tools/Actions (2), and Workspace (3).
 - JSON now exposes selectable actions sharing one document, previews action changes, and shows Path only for Query.
 - Field selection and editing are separate across all workspaces; `i` edits, Enter runs, `s` saves, and `p` applies output.

@@ -143,7 +143,7 @@ func TestVersionCommand(t *testing.T) {
 			t.Fatalf("version output = %q, want %q", got, want)
 		}
 	}
-	for _, unwanted := range []string{"commit:", "date:"} {
+	for _, unwanted := range []string{"date:"} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("version output = %q, should not contain %q", got, unwanted)
 		}

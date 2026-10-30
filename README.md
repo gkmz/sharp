@@ -34,19 +34,39 @@ The project is designed for everyday developer workflows: paste data, transform 
 
 ## Installation
 
-Install the latest version from source:
-
-```bash
-go install github.com/gkmz/sharp/cmd/sharp@latest
-```
-
-Install from a local checkout:
+Release packaging is prepared for the first `v0.1.0`; it has not been published yet. Until then, install from a local checkout or try the current main branch with `go install github.com/gkmz/sharp/cmd/sharp@main` (requires Go 1.25.1+).
 
 ```bash
 git clone https://github.com/gkmz/sharp.git
 cd sharp
 go install ./cmd/sharp
 ```
+
+Go installs into `go env GOBIN`, or `$(go env GOPATH)/bin` when GOBIN is empty. For the usual default, put Go's bin directory **before** older Sharp installations in your shell PATH:
+
+```bash
+export PATH="$(go env GOPATH)/bin:$PATH"
+command -v sharp
+sharp version
+```
+
+Add the export to your shell startup file (for zsh, `~/.zshrc`). A custom GOBIN needs its own PATH entry. If an older `/usr/local/bin/sharp` still runs, inspect `type -a sharp` and refresh the shell's command cache (`rehash` in zsh). To update from this checkout, rerun `go install ./cmd/sharp`.
+
+After the first release is published, [GitHub Releases](https://github.com/gkmz/sharp/releases) will provide macOS/Linux archives for amd64 and arm64, with LICENSE, both READMEs and `checksums.txt`. Go users can then install `go install github.com/gkmz/sharp/cmd/sharp@v0.1.0` (fixed version) or `@latest` (latest stable module version). Homebrew distribution is planned separately.
+
+For a release archive, select `darwin_arm64` for Apple Silicon, `darwin_amd64` for Intel Macs, or the corresponding Linux architecture (`uname -s; uname -m`). Download the archive and `checksums.txt` from the same Release into an empty directory, then verify the selected file (the following name is an example for the first Apple Silicon release):
+
+```bash
+# After v0.1.0 is published and downloaded:
+grep '  sharp_0.1.0_darwin_arm64.tar.gz$' checksums.txt | shasum -a 256 -c -
+tar -xzf sharp_0.1.0_darwin_arm64.tar.gz
+mkdir -p "$HOME/.local/bin"
+install -m 755 sharp "$HOME/.local/bin/sharp"
+export PATH="$HOME/.local/bin:$PATH"
+sharp version
+```
+
+On Linux use `sha256sum -c -` in place of `shasum -a 256 -c -` and the Linux archive name. Checksums detect corruption; binaries/checksums are not signed, and macOS releases are not notarized. Persist the chosen PATH entry in your shell configuration. Release archives need no Go installation. Clipboard functions on Linux need xclip/xsel and an available graphical clipboard session; ordinary CLI transformations do not.
 
 Run directly during development:
 
@@ -66,11 +86,11 @@ The TUI has three numbered regions:
 
 | Region | Purpose |
 | --- | --- |
-| `1 Categories` | Browse categories and subcategories. Type to filter tools directly here. |
+| `1 Categories` | Browse categories and subcategories with j/k or arrows. Press s to search. |
 | `2 Actions` | Select an action in the current tool group, such as Encode/Decode or Pretty/Minify. |
 | `3 Workspace` | Edit input/options, preview or run the selected action, and inspect output. |
 
-There is no permanent search box. In Categories, type `json`, `minify`, or another tool name to filter immediately. Use Up/Down to select a result, Enter to open it, and Esc to clear the filter. A single tool opens directly in the workspace. Opening a result clears the filter and restores its full action group. `/` starts search from other regions outside edit mode. Letters such as `j`, `k`, and `q` are search text in Categories.
+There is no permanent search box. Categories starts in Normal mode: `j/k` or Up/Down selects the next/previous entry, skips category headings, and scrolls the list to keep the selection visible. Press `s` to enter Search, then type `json`, `minify`, or another tool name. In Search, letters including `j`, `k`, `s`, and `q` are text; Up/Down selects results, Enter opens, and Esc clears the filter and returns to Normal Categories. Deleting the whole query keeps Search active. A single tool opens directly in the workspace. Opening a result clears the filter and restores its full action group. `/` also starts search from any region outside edit mode. In Actions and Workspace, `s` continues to save Output.
 
 Related tools share a Categories entry, with concrete operations in Actions:
 
@@ -103,9 +123,9 @@ Common shortcuts outside edit mode:
 | Tab / Shift+Tab | Cycle regions forward / backward in Normal mode. |
 | `[` / `]` | Select the previous / next action without changing region. |
 | `1`, `2`, `3` | Focus Categories, Actions, or Workspace. |
-| Type in Categories / `/` | Start inline tool search. |
+| `s` in Categories / `/` in Normal mode | Start inline tool search. |
 | `Ctrl+R` | Open the five most recently used actions in Normal mode; Enter opens without running, Esc closes. |
-| Up / Down | Select a category or filtered result; scroll Output in Workspace. |
+| `j/k` in Categories / Up / Down | Select the next/previous category; arrows select search results or scroll Output in Workspace. |
 | Left / Right or `h` / `l` | Select an action in region 2. |
 | Enter | Open the category selection; run the selected tool/action in regions 2 and 3. |
 | `i` | Edit Input directly. |
@@ -121,7 +141,7 @@ Common shortcuts outside edit mode:
 | `alt+u` / `alt+d` | Scroll input by half a page. |
 | Esc | Leave editing → Workspace → Actions → Categories; clear an active search filter. |
 | `?` | Open searchable command help. |
-| `ctrl+c` / `ctrl+q` | Quit from any region; `q` also quits outside Categories, search, and editors. |
+| `ctrl+c` / `ctrl+q` | Quit from any region; `q` also quits in Normal mode; Search and editors treat it as text. |
 
 ## CLI Usage
 
@@ -270,6 +290,7 @@ Requirements:
 Useful commands:
 
 ```bash
+make verify
 make test
 make run
 make build
@@ -277,11 +298,7 @@ make fmt
 make tidy
 ```
 
-Build with a release version:
-
-```bash
-go build -ldflags "-X github.com/gkmz/sharp/internal/cli.Version=0.1.0" ./cmd/sharp
-```
+Local source builds report `dev` and the VCS revision (with `-dirty` for uncommitted changes). Release packages include the version, commit and UTC build date; `go install ...@version` reports Go module version metadata. See the [release guide](docs/RELEASING.md) for verified snapshots, tag preparation and draft review.
 
 In sandboxed environments where the default Go build cache is not writable, use:
 
@@ -307,6 +324,7 @@ docs                   Product and development notes
 - [Code of Conduct](./docs/CODE_OF_CONDUCT.md)
 - [Security Policy](./docs/SECURITY.md)
 - [Changelog](./docs/CHANGELOG.md)
+- [Release Guide](docs/RELEASING.md)
 - [Product Requirements](docs/PRD.md)
 - [Development Plan](docs/DEVELOPMENT_PLAN.md)
 

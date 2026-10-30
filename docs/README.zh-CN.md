@@ -34,19 +34,39 @@
 
 ## 安装
 
-从源码安装最新版本：
-
-```bash
-go install github.com/gkmz/sharp/cmd/sharp@latest
-```
-
-从本地仓库安装：
+已准备首个 `v0.1.0` 的打包流程，尚未正式发布。目前可从本地仓库安装，或用 `go install github.com/gkmz/sharp/cmd/sharp@main` 体验 main 分支，需要 Go 1.25.1+。
 
 ```bash
 git clone https://github.com/gkmz/sharp.git
 cd sharp
 go install ./cmd/sharp
 ```
+
+Go 安装到 `go env GOBIN`；未设置时使用 `$(go env GOPATH)/bin`。常见默认配置下，把该目录放在 PATH 前面，避免执行旧版 Sharp：
+
+```bash
+export PATH="$(go env GOPATH)/bin:$PATH"
+command -v sharp
+sharp version
+```
+
+将 export 写入 shell 启动文件，zsh 使用 `~/.zshrc`。自定义 GOBIN 时应添加相应目录。如果仍执行 `/usr/local/bin/sharp`，用 `type -a sharp` 检查优先级，并刷新命令缓存（zsh 用 `rehash`）。更新本地代码后重新运行 `go install ./cmd/sharp` 即可。
+
+首个版本正式发布后，可在 [GitHub Releases](https://github.com/gkmz/sharp/releases) 下载 macOS/Linux 的 amd64、arm64 安装包，包含 LICENSE、中英文 README 和 `checksums.txt`。届时 Go 用户可以用 `go install github.com/gkmz/sharp/cmd/sharp@v0.1.0` 安装固定版本，或用 `@latest` 安装最新稳定模块版本。Homebrew 分发后续单独补充。
+
+Apple Silicon 选择 `darwin_arm64`，Intel Mac 选择 `darwin_amd64`，Linux 按系统和架构选择（`uname -s; uname -m`）。将压缩包与同一 Release 的 `checksums.txt` 下载到空目录，再校验所选文件。以下是首次 Apple Silicon 发布后的安装示例：
+
+```bash
+# 仅在 v0.1.0 正式发布并下载后执行：
+grep '  sharp_0.1.0_darwin_arm64.tar.gz$' checksums.txt | shasum -a 256 -c -
+tar -xzf sharp_0.1.0_darwin_arm64.tar.gz
+mkdir -p "$HOME/.local/bin"
+install -m 755 sharp "$HOME/.local/bin/sharp"
+export PATH="$HOME/.local/bin:$PATH"
+sharp version
+```
+
+Linux 替换为对应的文件名，用 `sha256sum -c -` 校验。校验和用于检查文件损坏，二进制及校验和尚未签名，macOS 尚未公证。请将选定的 PATH 设置写入 shell 配置。安装包不需要 Go；Linux 剪贴板功能另需 xclip/xsel 及可用的图形剪贴板会话，普通 CLI 转换无需剪贴板。
 
 开发模式直接运行：
 
@@ -66,11 +86,11 @@ TUI 分为三个带数字快捷键的区域：
 
 | 区域 | 用途 |
 | --- | --- |
-| `1 Categories` | 浏览类目和子类目，直接输入文字即可筛选工具。 |
+| `1 Categories` | 用 j/k 或上下方向键浏览类目和子类目，按 s 开启搜索。 |
 | `2 Actions` | 选择当前工具组中的动作，例如 Encode/Decode 或 Pretty/Minify。 |
 | `3 Workspace` | 编辑输入/参数、预览或执行当前动作、查看输出。 |
 
-搜索框不再常驻。在 Categories 直接输入 `json`、`minify` 或工具名即可搜索，用上下方向键选择结果，Enter 打开，Esc 清空筛选。只有一个工具时直接进入工作区；打开结果后清空筛选，恢复该组全部动作。在其他区域的非编辑状态下，可按 `/` 开始搜索。Categories 中的 `j`、`k`、`q` 等字母均作为搜索文字。
+搜索框不再常驻。Categories 默认处于 Normal 模式：`j/k` 或上下方向键逐项移动，跳过分类标题，并自动滚动以保持选中项可见。按 `s` 进入 Search 后，再输入 `json`、`minify` 或工具名。搜索中 `j`、`k`、`s`、`q` 等字母均作为文本；上下方向键选择结果，Enter 打开，Esc 清空筛选并返回 Categories Normal。删空关键词仍保持 Search 模式。只有一个工具时直接进入工作区；打开结果后清空筛选，恢复该组全部动作。任意区域的非编辑状态下仍可按 `/` 开始搜索。区域 2、3 的 `s` 继续保存 Output。
 
 相关工具共用 Categories 入口，具体操作在 Actions 中切换：
 
@@ -103,9 +123,9 @@ Input 和 Output 无需单独选中。`i` 直接编辑 Input，`o` 编辑 Option
 | Tab / Shift+Tab | 在 Normal 模式下向前 / 向后循环切换区域。 |
 | `[` / `]` | 切换上一 / 下一动作，保持所在区域。 |
 | `1`, `2`, `3` | 聚焦 Categories、Actions、Workspace。 |
-| Categories 中输入文字 / `/` | 开始工具搜索，筛选框临时显示在类目内。 |
+| Categories 中 `s` / Normal 模式下 `/` | 开始工具搜索，筛选框临时显示在类目内。 |
 | `Ctrl+R` | 在 Normal 模式打开最近使用的 5 个动作；Enter 打开但不执行，Esc 关闭。 |
-| 上 / 下方向键 | 选择类目或搜索结果；在 Workspace 中滚动 Output。 |
+| Categories 中 `j/k` / 上下方向键 | 逐项选择类目；方向键也可选择搜索结果或在 Workspace 中滚动 Output。 |
 | 左 / 右方向键或 `h` / `l` | 在区域 2 选择动作。 |
 | Enter | 在类目中打开所选项；在区域 2、3 执行当前工具/动作。 |
 | `i` | 直接编辑 Input。 |
@@ -121,7 +141,7 @@ Input 和 Output 无需单独选中。`i` 直接编辑 Input，`o` 编辑 Option
 | `alt+u` / `alt+d` | 输入区域半页滚动。 |
 | Esc | 结束编辑 → Workspace → Actions → Categories；搜索时清空筛选。 |
 | `?` | 打开可搜索的命令帮助。 |
-| `ctrl+c` / `ctrl+q` | 在任意区域退出；Categories、搜索和编辑以外也可按 `q` 退出。 |
+| `ctrl+c` / `ctrl+q` | 在任意区域退出；Normal 模式也可按 `q` 退出；搜索和编辑时 `q` 作为文本。 |
 
 ## CLI 使用
 
@@ -270,6 +290,7 @@ sharp 聚焦本地运行、可组合的数据与文本工作流。每项工具�
 常用命令：
 
 ```bash
+make verify
 make test
 make run
 make build
@@ -277,11 +298,7 @@ make fmt
 make tidy
 ```
 
-构建时注入发布版本：
-
-```bash
-go build -ldflags "-X github.com/gkmz/sharp/internal/cli.Version=0.1.0" ./cmd/sharp
-```
+本地源码构建显示 `dev` 和 VCS 提交号，未提交修改标记为 `-dirty`；发布包显示版本、提交号和 UTC 构建日期。`go install ...@version` 安装会读取 Go 模块版本。快照验证、标签准备和草稿审核步骤见[版本发布指南](RELEASING.zh-CN.md)。
 
 如果在沙箱环境中默认 Go 构建缓存不可写，可以使用：
 
@@ -307,6 +324,7 @@ docs                   产品和开发说明
 - [行为规范](CODE_OF_CONDUCT.zh-CN.md)
 - [安全策略](SECURITY.zh-CN.md)
 - [变更日志](CHANGELOG.zh-CN.md)
+- [版本发布指南](RELEASING.zh-CN.md)
 - [产品需求](PRD.md)
 - [开发计划](DEVELOPMENT_PLAN.md)
 
