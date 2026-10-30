@@ -74,7 +74,13 @@ There is no permanent search box. In Categories, type `json`, `minify`, or anoth
 
 All tool groups use the same workspace rules. Actions within a group share input, output, and input undo history: Base64 Encode/Decode, text transformations, hash algorithms, and regex Match/Replace all keep the current document when switching. Each action remembers its own options in memory; unrelated categories and subgroups keep separate documents. Output titles identify the action that produced the result.
 
+Press `Ctrl+R` (`^R` in the footer) in Normal mode to open the five most recently used tool actions. Use Up/Down and Enter to open the exact action in Workspace, or Esc to return. Opening a recent tool restores its complete action group without running it. Successful runs and valid previews after pasting/editing update the list; browsing actions, opening search results, and failed previews do not. History survives restarts and stores only tool IDs, never input, output, or options, in `sharp/recent-tools.json` under the OS user configuration directory (`~/Library/Application Support` on macOS, `$XDG_CONFIG_HOME` or `~/.config` on Linux). If storage is unavailable, history still works for the current session.
+
 Normal mode handles commands and navigation; only `i` or `o` enters an editor. Tab/Shift+Tab cycle Categories → Actions → Workspace. Use `[`/`]` from any region to switch actions without moving focus, or Left/Right and `h/l` in Actions. Known local transformations preview immediately after `v` paste or action changes, and about 200ms after editing stops; Esc ends editing and flushes the preview. DNS lookup, current time, and random generators run only on `r` or Enter. Options appear only when the action has parameters: `o` edits them, Enter runs, and Esc finishes editing. Inputless actions hide Input while preserving the group's document for other actions.
+
+The footer identifies the active mode with a text and color badge: `NORMAL` for navigation, `INSERT Input/Options/Path` for editing, `SEARCH Categories` for search, and `HELP Commands` for help. The active Workspace border also identifies its mode and edited field. In Insert, the footer explains whether Enter adds a newline or runs the action. Esc closes one layer at a time: Help → its previous context; search → unfiltered Categories; Insert → Workspace Normal → Actions → Categories. Esc in unfiltered Categories leaves the document and operation feedback intact.
+
+Green borders identify the focused region; blue marks the active selection and a quieter style preserves selections in other regions. Input, Options/Path, and Output use open sections inside Workspace. Empty sections show contextual guidance without adding text to the document or result. Colors adapt to light and dark terminal backgrounds; font family and size follow your terminal settings.
 
 JSON follows the same rules with Pretty, Minify, Sort, Query, Escape, Unescape, and Check. Path appears only for Query; Enter in Path queries the shared input. Check reports validation in the status line. Across all groups, `p`/`a` applies a successful result to Input and clears Output; errors cannot be applied. While input or options are incomplete, the previous result stays visible as `stale`; copy, save, and Apply are blocked until a fresh result is available.
 
@@ -88,6 +94,7 @@ Common shortcuts outside edit mode:
 | `[` / `]` | Select the previous / next action without changing region. |
 | `1`, `2`, `3` | Focus Categories, Actions, or Workspace. |
 | Type in Categories / `/` | Start inline tool search. |
+| `Ctrl+R` | Open the five most recently used actions in Normal mode; Enter opens without running, Esc closes. |
 | Up / Down | Select a category or filtered result; scroll Output in Workspace. |
 | Left / Right or `h` / `l` | Select an action in region 2. |
 | Enter | Open the category selection; run the selected tool/action in regions 2 and 3. |

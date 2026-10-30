@@ -332,7 +332,7 @@ func TestCategoryViewShowsSelectableSubcategories(t *testing.T) {
 	}
 
 	view := stripANSI(model.categoryView(30, 30))
-	for _, want := range []string{"Encode", "  b64", "  url"} {
+	for _, want := range []string{"Encode", "  Base64", "  URL"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("categoryView() = %q, want category marker %q", view, want)
 		}

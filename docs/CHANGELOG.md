@@ -8,6 +8,8 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 
 ### Added
 
+- Added a Ctrl+R recent-tools picker for the five most recently used actions, with persistent ID-only history, exact-action navigation without execution, and session fallback when storage is unavailable.
+
 - Lazygit-inspired TUI layout with numbered focus regions.
 - Category and subcategory navigation.
 - Search across categories, subcategories, and concrete tools.
@@ -21,6 +23,13 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 - Open source project documentation: README, contributing guide, code of conduct, security policy, and changelog.
 
 ### Changed
+
+- Category borders now indicate additional rows above/below. Group and current-result headings avoid repeated action labels; retained results keep their source, and execution feedback uses readable tool names.
+- Refined document heading contrast and text weight; Categories now uses readable subgroup names and right-aligned counts, with primary guidance in Input and a quieter waiting hint in Output.
+- Reworked the TUI visual hierarchy with adaptive colors, green focus borders, full-width category selection, subdued retained selections, and shortcuts without filled backgrounds.
+- Workspace now uses open sections, one description row, contextual empty-state guidance, and a clean document view without editor gutters in Normal mode.
+- Mode badges now consistently identify Normal, Insert, Search, and Help. Workspace titles name the active editor, and Insert hints explain Enter and Esc.
+- Esc now follows one shared priority order: close Help, clear search, finish editing, then return through Workspace → Actions → Categories. Idle Categories preserves operation feedback.
 
 - Normal mode now navigates regions with Tab/Shift+Tab and actions with brackets; Input/Output no longer require pane selection. Paste previews immediately, edits preview after 200ms, and stale results cannot be copied, saved, or applied. Search opens the complete action group.
 - All tool groups now share the JSON workspace interaction model: input/undo/output survive action switches and option drafts are kept separately per action in memory.
@@ -42,6 +51,7 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 
 ### Fixed
 
+- Help adapts to its viewport width without truncating long key names; overlay clipping preserves ANSI color sequences.
 - Undo/redo while editing Options or JSON Path no longer changes Input; malformed secret option errors no longer reveal secret fragments.
 - Search results now execute the selected JSON action rather than always formatting JSON.
 - Output arrow keys reach the active viewport, operation notifications remain visible, and shortcut hints stay within terminal width.

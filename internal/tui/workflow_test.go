@@ -140,11 +140,11 @@ func TestWorkflowJSONPathOnlyShownForQuery(t *testing.T) {
 	p := m.currentPage().(*jsonToolPage)
 	p.SetInput(`{"data":{"name":"sharp"}}`)
 	selectWorkflowAction(t, &m, "json.pretty")
-	if strings.Contains(stripANSI(p.View()), "─Path") {
+	if strings.Contains(stripANSI(p.View()), "\n Path ") {
 		t.Fatal("Path consumes space outside Query")
 	}
 	selectWorkflowAction(t, &m, "json.get")
-	if !strings.Contains(stripANSI(p.View()), "─Path") {
+	if !strings.Contains(stripANSI(p.View()), "\n Path ") {
 		t.Fatal("Query needs Path field")
 	}
 	m.focus = focusWorkspace
@@ -329,10 +329,10 @@ func TestWorkflowGenericOptionsFitWorkspace(t *testing.T) {
 		}
 		m.resize()
 		p := m.currentPage().(*genericToolPage)
-		// 预算由外框、工具栏、页面标题与底部状态共同决定。
+		// The workspace header is now a single description row.
 		bodyHeight := m.height - 2
 		toolHeight := clamp(m.toolRows(56)+2, 3, max(3, bodyHeight-8))
-		budget := panelContentHeight(bodyHeight-toolHeight) - 4
+		budget := panelContentHeight(bodyHeight-toolHeight) - 1
 		if got := lipgloss.Height(p.View()); got > budget {
 			t.Fatalf("%s uses %d rows, budget %d", id, got, budget)
 		}
@@ -353,7 +353,7 @@ func TestWorkflowSearchRetainsCategoryHierarchy(t *testing.T) {
 	}
 	for _, category := range m.categories {
 		if category.Category == tool.CategoryJSON && !category.Header {
-			line := m.categoryLine(category)
+			line := m.categoryLine(category, 30)
 			if !strings.HasPrefix(line, "JSON") {
 				t.Fatalf("standalone JSON appears nested under another category: %q", line)
 			}

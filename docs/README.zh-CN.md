@@ -74,7 +74,13 @@ TUI 分为三个带数字快捷键的区域：
 
 所有工具组采用同一套工作台规则。组内动作共享输入、输出和输入撤销记录：Base64 编码/解码、文本转换、哈希算法、正则匹配/替换切换时都会保留当前文档。每个动作在内存中分别保留参数草稿；不同类目和子类目之间的文档相互独立。输出标题注明生成结果的动作。
 
+在 Normal 模式按 `Ctrl+R`（底栏显示为 `^R`）打开最近使用的 5 个工具动作。上下方向键选择，Enter 直接进入对应工作台，Esc 返回；打开时保留完整动作组，不自动执行。成功运行、粘贴或编辑后的有效预览会更新记录；浏览动作、打开搜索结果和失败预览不会计入。历史跨重启保留，只存工具 ID，不保存输入、输出或参数。文件位于系统用户配置目录下的 `sharp/recent-tools.json`：macOS 为 `~/Library/Application Support`，Linux 为 `$XDG_CONFIG_HOME` 或 `~/.config`。无法读写文件时仍可使用本次会话的历史。
+
 Normal 模式处理命令与导航，只有 `i` 或 `o` 才进入编辑。Tab/Shift+Tab 循环切换 Categories → Actions → Workspace。在任意区域按 `[`/`]` 即可切换动作并保持所在区域，也可在 Actions 用左右方向键或 `h/l` 切换。已知的本地转换在 `v` 粘贴、切换动作后立即预览；编辑停顿约 200ms 后自动更新，Esc 结束编辑时立即补齐预览。DNS 查询、当前时间和随机生成只在 `r` 或 Enter 时运行。只有当前动作需要参数时才显示 Options：`o` 编辑，Enter 执行，Esc 结束编辑。无输入动作隐藏 Input，同时保留组内其他动作的文档。
+
+底栏用文字和颜色标明当前模式：`NORMAL` 表示导航，`INSERT Input/Options/Path` 表示编辑对应字段，`SEARCH Categories` 表示搜索，`HELP Commands` 表示帮助。Workspace 聚焦时，其边框标题也会显示模式及编辑对象。Insert 底栏明确提示 Enter 是换行还是执行。Esc 每次只退出一层：帮助返回原区域；搜索返回未筛选的 Categories；Insert → Workspace Normal → Actions → Categories。在未筛选的 Categories 按 Esc 不会改变文档或覆盖操作反馈。
+
+绿色边框标识当前焦点区域，蓝色标识当前选中项，其他区域以较弱样式保留选择。Workspace 内的 Input、Options/Path 和 Output 使用开放分区，空白时显示对应操作引导；引导文字不会进入输入文档或结果。配色适配深色与浅色终端背景，字体和字号沿用终端设置。
 
 JSON 使用相同规则，提供 Pretty、Minify、Sort、Query、Escape、Unescape、Check。仅 Query 显示 Path，在路径中按 Enter 查询共用输入；Check 在状态行显示校验结果。所有工具组的 `p`/`a` 都将成功结果应用回 Input 并清空 Output，错误信息不能回填输入。输入或参数尚未完整时，旧结果保留并标记为 `stale`，更新完成前无法复制、保存或应用。
 
@@ -88,6 +94,7 @@ Input 和 Output 无需单独选中。`i` 直接编辑 Input，`o` 编辑 Option
 | `[` / `]` | 切换上一 / 下一动作，保持所在区域。 |
 | `1`, `2`, `3` | 聚焦 Categories、Actions、Workspace。 |
 | Categories 中输入文字 / `/` | 开始工具搜索，筛选框临时显示在类目内。 |
+| `Ctrl+R` | 在 Normal 模式打开最近使用的 5 个动作；Enter 打开但不执行，Esc 关闭。 |
 | 上 / 下方向键 | 选择类目或搜索结果；在 Workspace 中滚动 Output。 |
 | 左 / 右方向键或 `h` / `l` | 在区域 2 选择动作。 |
 | Enter | 在类目中打开所选项；在区域 2、3 执行当前工具/动作。 |

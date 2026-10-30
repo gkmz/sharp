@@ -23,9 +23,6 @@ func (m model) startCategorySearch(first tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m model) updateCategorySearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "esc":
-		m.clearCategorySearch()
-		return m, nil
 	case "enter":
 		m.applySearch()
 		m.search.Blur()
@@ -45,6 +42,7 @@ func (m model) updateCategorySearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if p := m.currentPage(); p != nil {
 			p.Preview()
+			p.takeToolUse() // Opening a search result is navigation only.
 			m.status = p.Status()
 		}
 		return m, nil
@@ -66,6 +64,30 @@ func (m model) updateCategorySearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.search.Blur()
 	}
 	return m, cmd
+}
+
+// Esc consumes exactly one layer; page editors own their preview cleanup.
+func (m model) leaveContext() model {
+	switch {
+	case m.showRecent:
+		m.showRecent = false
+	case m.showHelp:
+		m.showHelp = false
+		m.help.Blur()
+	case m.focus == focusSearch || (m.focus == focusCategories && m.search.Value() != ""):
+		m.clearCategorySearch()
+	case m.focus == focusWorkspace:
+		if p := m.currentPage(); p != nil && p.IsEditing() {
+			updated, _ := p.Update(tea.KeyMsg{Type: tea.KeyEsc})
+			m.setCurrentPage(updated)
+			m.status = updated.Status()
+		} else {
+			m.focus = focusTabs
+		}
+	case m.focus == focusTabs:
+		m.focus = focusCategories
+	}
+	return m
 }
 
 func (m *model) clearCategorySearch() {
@@ -190,9 +212,15 @@ func workspaceGroupTitle(t tool.Tool) string {
 	if t.Category() == tool.CategoryJSON || strings.EqualFold(category, subgroup) {
 		return category
 	}
-	names := map[string]string{"b64": "Base64", "b64url": "Base64 URL", "b64rawurl": "Raw Base64 URL", "hex": "Hex", "html": "HTML", "unicode": "Unicode", "url": "URL", "hash": "Hash", "hmac": "HMAC", "regex": "Regex", "query": "Query", "dns": "DNS", "cidr": "CIDR", "csv": "CSV", "yaml": "YAML", "json": "JSON", "headers": "HTTP Headers", "jwt": "JWT", "uuid": "UUID", "random": "Random"}
+	return category + " · " + subgroupDisplayName(subgroup)
+}
+
+// Display names are shared by navigation and the Actions title. Internal IDs
+// remain unchanged for tool lookup, grouping, and search aliases.
+func subgroupDisplayName(subgroup string) string {
+	names := map[string]string{"b64": "Base64", "b64url": "Base64 URL", "b64rawurl": "Raw Base64 URL", "hex": "Hex", "html": "HTML", "unicode": "Unicode", "url": "URL", "hash": "Hash", "hmac": "HMAC", "regex": "Regex", "query": "Query", "dns": "DNS", "cidr": "CIDR", "csv": "CSV", "yaml": "YAML", "json": "JSON", "headers": "HTTP Headers", "jwt": "JWT", "uuid": "UUID", "random": "Random", "text": "Text", "time": "Time", "password": "Password", "token": "Token"}
 	if name, ok := names[subgroup]; ok {
-		subgroup = name
+		return name
 	}
-	return category + " · " + subgroup
+	return subgroup
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/gkmz/sharp/internal/clipboard"
 	"github.com/gkmz/sharp/pkg/tool"
 )
@@ -75,7 +76,9 @@ type toolPage interface {
 	HelpCommands() []helpCommand
 	FooterHints() string
 	IsEditing() bool
+	EditTarget() string
 	HandleKey(string) bool
+	takeToolUse() string
 }
 
 type model struct {
@@ -96,30 +99,22 @@ type model struct {
 	helpVP viewport.Model
 	pages  map[string]toolPage
 
-	showHelp bool
+	showHelp       bool
+	recent         recentTools
+	showRecent     bool
+	recentItems    []string
+	recentSelected int
 
 	width  int
 	height int
 	status string
 }
 
-var (
-	appTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("81"))
-	panelTitleStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
-	activeLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("31"))
-	dimStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	errorStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	successStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	selectedRowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("24"))
-	sectionRuleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
-	footerStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	statusKeyStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("31"))
-	statusTextStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-)
-
 // Run starts the interactive Bubble Tea application for registry.
 func Run(registry *tool.Registry) error {
-	p := tea.NewProgram(newModel(registry), tea.WithAltScreen())
+	m := newModel(registry)
+	m.initRecent()
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
 }
@@ -154,6 +149,13 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	updated, cmd := m.update(msg)
+	next := updated.(model)
+	next.collectRecentUsage()
+	return next, cmd
+}
+
+func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case workspacePreviewMsg:
 		if msg.revision != msg.page.previewVersion() {
@@ -161,7 +163,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// 定时消息始终交回原工作台，不受搜索、帮助或当前区域影响。
 		msg.page.Update(msg)
-		if p := m.currentPage(); p == msg.page && !m.showHelp && m.focus != focusSearch {
+		if p := m.currentPage(); p == msg.page && !m.showHelp && !m.showRecent && m.focus != focusSearch {
 			m.status = p.Status()
 		}
 		return m, nil
@@ -174,9 +176,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key == "ctrl+c" || key == "ctrl+q" {
 			return m, tea.Quit
 		}
+		if key == "esc" {
+			return m.leaveContext(), nil
+		}
+		if m.showRecent {
+			m.updateRecent(key)
+			return m, nil
+		}
 		if m.showHelp {
 			switch key {
-			case "esc", "?":
+			case "?":
 				m.showHelp = false
 				m.help.Blur()
 				return m, nil
@@ -204,6 +213,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setCurrentPage(updated)
 			m.status = updated.Status()
 			return m, cmd
+		}
+		if key == "ctrl+r" {
+			m.openRecent()
+			return m, nil
 		}
 		// 分类区域的字母优先用于搜索，j/k/q 也不能先被全局命令消费。
 		if m.focus == focusCategories && msg.Type == tea.KeyRunes && !msg.Alt && key != "/" && key != "?" && key != "1" && key != "2" && key != "3" && key != "[" && key != "]" {
@@ -247,8 +260,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.moveCategory(1)
 			case "up":
 				m.moveCategory(-1)
-			case "esc":
-				m.clearCategorySearch()
 			case "enter", "right":
 				m.openSelection()
 			}
@@ -258,8 +269,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.moveTab(1)
 			case "h", "left":
 				m.moveTab(-1)
-			case "esc":
-				m.focus = focusCategories
 			case "enter":
 				m.focus = focusWorkspace
 				m.runSelected()
@@ -267,12 +276,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.updateWorkspaceKey(msg)
 			}
 		case focusWorkspace:
-			switch key {
-			case "esc":
-				m.focus = focusTabs
-			default:
-				return m.updateWorkspaceKey(msg)
-			}
+			return m.updateWorkspaceKey(msg)
 		}
 	default:
 		if m.showHelp {
@@ -374,10 +378,10 @@ func (m model) View() string {
 	toolHeight := clamp(m.toolRows(rightWidth-2)+2, 3, max(3, bodyHeight-8))
 	workspaceHeight := max(6, bodyHeight-toolHeight)
 
-	categories := panelBox(1, "Categories", m.focus == focusCategories || m.focus == focusSearch, m.categoryView(leftWidth-2, panelContentHeight(categoryHeight)), leftWidth, categoryHeight)
+	categories := m.categoryPanel(leftWidth, categoryHeight)
 	left := categories
-	tabs := panelBox(2, m.tabsTitle(), m.focus == focusTabs, m.tabsView(rightWidth-2, panelContentHeight(toolHeight)), rightWidth, toolHeight)
-	page := panelBox(3, "Workspace", m.focus == focusWorkspace, m.pageView(rightWidth-2, panelContentHeight(workspaceHeight)), rightWidth, workspaceHeight)
+	tabs := panelBox(2, m.tabsTitle(), !m.showHelp && !m.showRecent && m.focus == focusTabs, m.tabsView(rightWidth-2, panelContentHeight(toolHeight)), rightWidth, toolHeight)
+	page := panelBox(3, m.workspaceTitle(), !m.showHelp && !m.showRecent && m.focus == focusWorkspace, m.pageView(rightWidth-2, panelContentHeight(workspaceHeight)), rightWidth, workspaceHeight)
 	right := lipgloss.JoinVertical(lipgloss.Left, tabs, page)
 	footer := fitWidth(footerStyle.Render(m.footerLine()), m.width)
 	notification := fitWidth(m.status, m.width)
@@ -385,6 +389,9 @@ func (m model) View() string {
 	view := body + "\n" + notification + "\n" + footer
 	if m.showHelp {
 		view = overlayPanel(view, m.helpView(), m.width, m.height)
+	}
+	if m.showRecent {
+		view = placeOverlay(view, m.recentView(), m.width, m.height)
 	}
 	lines := strings.Split(fitHeight(view, m.height), "\n")
 	for i, line := range lines {
@@ -400,7 +407,7 @@ func (m *model) resize() {
 		bodyHeight := max(10, m.height-2)
 		toolHeight := clamp(m.toolRows(rightWidth-2)+2, 3, max(3, bodyHeight-8))
 		workspaceHeight := max(6, bodyHeight-toolHeight)
-		p.SetSize(rightWidth-2, max(4, panelContentHeight(workspaceHeight)-4))
+		p.SetSize(rightWidth-2, max(4, panelContentHeight(workspaceHeight)-1))
 	}
 	m.search.Width = max(10, clamp(m.width*20/100, 22, max(22, m.width-60))-4)
 	m.help.Width = max(18, min(42, m.width-10))
@@ -426,33 +433,53 @@ func (m model) searchView(width, height int) string {
 	return dimStyle.Render(query)
 }
 
-func (m model) categoryView(width, height int) string {
-	var b strings.Builder
+// The panel legends and list share the exact window, including the search row.
+func (m model) categoryWindow(height int) (start, end int) {
 	visible := max(1, height)
 	if m.focus == focusSearch || m.search.Value() != "" {
-		b.WriteString(m.searchView(width, 1) + "\n")
 		visible = max(1, visible-1)
 	}
-	start := 0
 	if m.selectedCat >= visible {
 		start = m.selectedCat - visible + 1
 	}
+	start = min(start, max(0, len(m.categories)-visible))
+	return start, min(len(m.categories), start+visible)
+}
 
-	for i := start; i < len(m.categories); i++ {
+func (m model) categoryPanel(width, height int) string {
+	start, end := m.categoryWindow(panelContentHeight(height))
+	title, bottom := "[1]-Categories", ""
+	if start > 0 {
+		title += " ↑"
+	}
+	if end < len(m.categories) {
+		bottom = "↓ more"
+	}
+	active := !m.showHelp && !m.showRecent && (m.focus == focusCategories || m.focus == focusSearch)
+	return panelBoxWithLegends(title, bottom, active, m.categoryView(width-2, panelContentHeight(height)), width, height)
+}
+
+func (m model) categoryView(width, height int) string {
+	var b strings.Builder
+	if m.focus == focusSearch || m.search.Value() != "" {
+		b.WriteString(m.searchView(width, 1) + "\n")
+	}
+	start, end := m.categoryWindow(height)
+	for i := start; i < end; i++ {
 		c := m.categories[i]
-		line := m.categoryLine(c)
-		if len(line) > width {
-			line = trimToWidth(line, width)
-		}
+		line := m.categoryLine(c, width)
 		if i == m.selectedCat {
-			line = selectedToken(line)
+			style := retainedRowStyle
+			if !m.showHelp && !m.showRecent && (m.focus == focusCategories || m.focus == focusSearch) {
+				style = selectedRowStyle
+			}
+			line = style.Render(fitWidth(line, width))
+		} else if c.Header {
+			line = appTitleStyle.Render(line)
 		} else {
-			line = dimStyle.Render(line)
+			line = textStyle.Render(line)
 		}
 		b.WriteString(line + "\n")
-		if i-start+1 >= visible {
-			break
-		}
 	}
 
 	if len(m.categories) == 0 {
@@ -461,14 +488,19 @@ func (m model) categoryView(width, height int) string {
 	return b.String()
 }
 
-func (m model) categoryLine(c categoryGroup) string {
+func (m model) categoryLine(c categoryGroup, width int) string {
 	if c.Header {
-		return fmt.Sprintf("%s", c.Category)
+		return truncateDisplay(string(c.Category), width)
 	}
+	label := string(c.Category)
 	if c.Subcategory != "" && m.categoryHasHeader(c.Category) {
-		return fmt.Sprintf("  %-10s %d", c.Subcategory, len(c.Tabs))
+		label = "  " + subgroupDisplayName(c.Subcategory)
 	}
-	return fmt.Sprintf("%-12s %d", c.Category, len(c.Tabs))
+	count := fmt.Sprint(len(c.Tabs))
+	if width <= lipgloss.Width(count) {
+		return truncateDisplay(count, width)
+	}
+	return fitWidth(truncateDisplay(label, width-lipgloss.Width(count)-1), width-lipgloss.Width(count)) + count
 }
 
 func (m model) tabsView(width, height int) string {
@@ -481,10 +513,10 @@ func (m model) tabsView(width, height int) string {
 	for _, tab := range cat.Tabs {
 		labels = append(labels, actionLabel(tab.Tool))
 	}
-	return flowLabels(width, height, labels, m.selectedTab)
+	return flowLabels(width, height, labels, m.selectedTab, !m.showHelp && !m.showRecent && m.focus == focusTabs)
 }
 
-func flowLabels(width, height int, labels []string, selected int) string {
+func flowLabels(width, height int, labels []string, selected int, active bool) string {
 	var b strings.Builder
 	lineWidth := 0
 	lines := 0
@@ -510,9 +542,13 @@ func flowLabels(width, height int, labels []string, selected int) string {
 		}
 		cell := " " + label + " "
 		if i == selected {
-			b.WriteString(activeLabelStyle.Render(cell))
+			style := retainedLabelStyle
+			if active {
+				style = activeLabelStyle
+			}
+			b.WriteString(style.Render(cell))
 		} else {
-			b.WriteString(dimStyle.Render(cell))
+			b.WriteString(textStyle.Render(cell))
 		}
 		lineWidth += cellWidth
 		if lines >= height && i < len(labels)-1 {
@@ -566,40 +602,56 @@ func (m model) pageView(width, height int) string {
 
 	var b strings.Builder
 	if tab := m.currentTab(); tab != nil {
-		name := workspaceGroupTitle(tab.Tool) + " · " + actionLabel(tab.Tool)
-		b.WriteString(appTitleStyle.Render(name) + "\n")
-		b.WriteString(dimStyle.Render(tab.Tool.Description()) + "\n")
-		b.WriteString(sectionRuleStyle.Render(strings.Repeat("-", max(8, width))) + "\n")
+		b.WriteString(dimStyle.Render(truncateDisplay(tab.Tool.Description(), width)) + "\n")
 	}
-	p.SetActive(m.focus == focusWorkspace)
+	p.SetActive(!m.showHelp && !m.showRecent && m.focus == focusWorkspace)
 	b.WriteString(p.View())
 	return b.String()
 }
 
 func (m model) tabsTitle() string {
 	if tab := m.currentTab(); tab != nil {
-		return workspaceGroupTitle(tab.Tool) + " Actions"
+		return workspaceGroupTitle(tab.Tool)
 	}
 	return "Actions"
 }
 
+func (m model) workspaceTitle() string {
+	if m.focus != focusWorkspace {
+		return "Workspace"
+	}
+	if p := m.currentPage(); p != nil && p.IsEditing() {
+		return "Workspace · INSERT " + p.EditTarget()
+	}
+	return "Workspace · NORMAL"
+}
+
 func (m model) footerLine() string {
+	if m.showRecent {
+		return modeStatusLine("RECENT", "", statusHint("↑/↓", "select"), statusHint("Enter", "open"), statusHint("Esc", "close"))
+	}
 	if m.showHelp {
-		return statusLine("Help", statusHint("type", "filter"), statusHint("ctrl+u/d", "scroll"), statusHint("Esc", "close"))
+		return modeStatusLine("HELP", "Commands", statusHint("type", "filter"), statusHint("ctrl+u/d", "scroll"), statusHint("Esc", "close"))
 	}
 	switch m.focus {
 	case focusSearch:
-		return statusLine("Filter", statusHint("↑/↓", "select"), statusHint("Enter", "open"), statusHint("Esc", "clear"))
+		return modeStatusLine("SEARCH", "Categories", statusHint("↑/↓", "select"), statusHint("Enter", "open"), statusHint("Esc", "clear"))
 	case focusCategories:
-		return statusLine("Categories", statusHint("type", "search"), statusHint("↑/↓", "select"), statusHint("Tab", "area"), statusHint("?", "help"))
+		return modeStatusLine("NORMAL", "Categories", statusHint("type", "search"), statusHint("↑/↓", "select"), statusHint("Tab", "area"), statusHint("^R", "recent"), statusHint("?", "help"))
 	case focusTabs:
-		return statusLine("Actions", statusHint("h/l or ←/→", "select"), statusHint("Tab", "area"), statusHint("Enter", "run"), statusHint("?", "help"))
+		return modeStatusLine("NORMAL", "Actions", statusHint("←/→", "select"), statusHint("Tab", "area"), statusHint("Enter", "run"), statusHint("^R", "recent"), statusHint("?", "help"))
 	case focusWorkspace:
 		if p := m.currentPage(); p != nil {
 			if hints := p.FooterHints(); hints != "" {
+				if !p.IsEditing() {
+					recent := statusHint("^R", "recent")
+					if lipgloss.Width(hints)+1+lipgloss.Width(recent) <= m.width {
+						hints += " " + recent
+					}
+				}
 				return hints
 			}
-			return statusLine("Workspace", statusHint("r/Enter", "run"), statusHint("i", "edit"), statusHint("v", "paste"), statusHint("y", "copy"), statusHint("?", "help"))
+			return modeStatusLine("NORMAL", "Workspace", statusHint("r/Enter", "run"), statusHint("i", "edit"), statusHint("v", "paste"), statusHint("y", "copy"), statusHint("?", "help"))
 		}
 	}
 	return ""
@@ -629,12 +681,13 @@ func (m model) helpView() string {
 func (m model) helpContent() string {
 	sections := m.helpSections()
 	query := strings.ToLower(strings.TrimSpace(m.help.Value()))
+	width := m.helpVP.Width
 
 	var b strings.Builder
 	b.WriteString(sectionLabel("Filter", true, true) + " ")
 	b.WriteString(m.help.View() + "\n")
-	b.WriteString(dimStyle.Render("Esc/? close | Ctrl+u/d scroll help | Ctrl+x clear filter") + "\n")
-	b.WriteString(sectionRuleStyle.Render(strings.Repeat("-", 64)) + "\n")
+	b.WriteString(dimStyle.Render(wrapDisplayText("Esc close · Ctrl+u/d scroll · Ctrl+x clear", width)) + "\n")
+	b.WriteString(sectionRuleStyle.Render(strings.Repeat("─", width)) + "\n")
 	matched := 0
 	for _, section := range sections {
 		filtered := filterHelpCommands(section.Commands, query)
@@ -646,7 +699,7 @@ func (m model) helpContent() string {
 		}
 		b.WriteString(panelTitleStyle.Render(section.Title) + "\n")
 		for _, cmd := range filtered {
-			b.WriteString(renderHelpCommand(cmd, 64))
+			b.WriteString(renderHelpCommand(cmd, width))
 		}
 		matched += len(filtered)
 	}
@@ -658,6 +711,7 @@ func (m model) helpContent() string {
 
 func (m model) helpSections() []helpSection {
 	global := []helpCommand{
+		{Key: "ctrl+r", Command: "Recent Tools", Description: "Open the five most recently used actions in Normal mode. Enter opens the workspace without running; Esc returns."},
 		{Key: "Tab/Shift+Tab", Command: "Change Area", Description: "Cycle Categories, Actions and Workspace in Normal mode; Esc leaves editing first."},
 		{Key: "[ / ]", Command: "Change Action", Description: "Select the previous/next action in the current group without changing area."},
 		{Key: "/", Command: "Search Tools", Description: "Filter tools inside Categories; typing there also starts search."},
@@ -666,7 +720,7 @@ func (m model) helpSections() []helpSection {
 		{Key: "3", Command: "Workspace", Description: "Focus current workspace."},
 		{Key: "?", Command: "Help", Description: "Open or close this command help."},
 		{Key: "ctrl+c/ctrl+q", Command: "Quit", Description: "Quit from any area. q also quits outside Categories and editors."},
-		{Key: "Esc", Command: "Back", Description: "Leave edit mode, close overlays, or move focus back."},
+		{Key: "Esc", Command: "Back", Description: "Close Help; clear search; leave Insert in Workspace; then move Workspace → Actions → Categories. Idle Categories stays put."},
 	}
 	context := make([]helpCommand, 0)
 	switch m.focus {
@@ -724,9 +778,14 @@ func filterHelpCommands(commands []helpCommand, query string) []helpCommand {
 }
 
 func renderHelpCommand(cmd helpCommand, width int) string {
-	keyWidth := 12
+	if width < 70 {
+		heading := statusKeyStyle.Render(cmd.Key) + "  " + textStyle.Render(cmd.Command)
+		description := wrapDisplayText(cmd.Description, max(1, width-2))
+		return heading + "\n  " + strings.ReplaceAll(description, "\n", "\n  ") + "\n"
+	}
+	keyWidth := 16
 	commandWidth := 18
-	key := activeLabelStyle.Render(fitWidth(" "+cmd.Key+" ", keyWidth))
+	key := statusKeyStyle.Render(fitWidth(" "+cmd.Key+" ", keyWidth))
 	command := fitWidth(cmd.Command, commandWidth)
 	prefixWidth := keyWidth + 1 + commandWidth + 1
 	descWidth := max(10, width-prefixWidth)
@@ -760,14 +819,18 @@ func panelBoxTitle(title string, active bool, content string, width, height int)
 }
 
 func panelBoxWithTitle(titleText string, active bool, content string, width, height int) string {
-	borderColor := lipgloss.Color("250")
+	return panelBoxWithLegends(titleText, "", active, content, width, height)
+}
+
+func panelBoxWithLegends(titleText, bottomText string, active bool, content string, width, height int) string {
+	color := lipgloss.TerminalColor(borderColor)
 	titleStyle := panelTitleStyle
 	if active {
-		borderColor = lipgloss.Color("39")
-		titleStyle = appTitleStyle
+		color = focusColor
+		titleStyle = focusStyle
 	}
 	// 手写 legend 风格边框：标题嵌入上边框，内容永远被裁剪/补齐到固定宽高。
-	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+	borderStyle := lipgloss.NewStyle().Foreground(color)
 	titleText = truncateDisplay(titleText, max(1, width-4))
 	renderedTitle := titleStyle.Render(titleText)
 
@@ -777,6 +840,10 @@ func panelBoxWithTitle(titleText string, active bool, content string, width, hei
 	rightRuleWidth := max(0, innerWidth-titleWidth-1)
 	top := borderStyle.Render("┌─") + renderedTitle + borderStyle.Render(strings.Repeat("─", rightRuleWidth)+"┐")
 	bottom := borderStyle.Render("└" + strings.Repeat("─", innerWidth) + "┘")
+	if bottomText != "" && innerWidth > 3 {
+		label := truncateDisplay(" "+bottomText+" ", innerWidth-1)
+		bottom = borderStyle.Render("└─") + dimStyle.Render(label) + borderStyle.Render(strings.Repeat("─", max(0, innerWidth-1-lipgloss.Width(label)))+"┘")
+	}
 
 	contentLines := fixedLines(content, innerWidth, bodyHeight)
 	lines := make([]string, 0, height)
@@ -795,6 +862,14 @@ func overlayPanel(base string, overlay string, width, height int) string {
 	boxWidth := clamp(width*70/100, 46, max(46, width-4))
 	boxHeight := clamp(height*70/100, 10, max(10, height-2))
 	box := panelBox(0, "Help", true, overlay, boxWidth, boxHeight)
+	return placeOverlay(base, box, width, height)
+}
+
+func placeOverlay(base, box string, width, height int) string {
+	if width <= 0 || height <= 0 {
+		return base
+	}
+	boxWidth, boxHeight := lipgloss.Width(box), lipgloss.Height(box)
 	baseLines := fixedLines(base, width, height)
 	boxLines := strings.Split(box, "\n")
 	top := max(0, (height-boxHeight)/2)
@@ -823,21 +898,7 @@ func cutDisplayLeft(s string, width int) string {
 	if width <= 0 {
 		return s
 	}
-	remaining := width
-	for i, r := range s {
-		rw := lipgloss.Width(string(r))
-		if rw == 0 {
-			continue
-		}
-		if remaining-rw < 0 {
-			return s[i:]
-		}
-		remaining -= rw
-		if remaining == 0 {
-			return s[i+len(string(r)):]
-		}
-	}
-	return ""
+	return ansi.Cut(s, width, ansi.StringWidth(s))
 }
 
 func panelContentHeight(outerHeight int) int {
@@ -941,6 +1002,8 @@ func (m *model) moveTab(delta int) {
 	m.rebuildPage()
 	if p := m.currentPage(); p != nil {
 		p.Preview()
+		// Navigation keeps the existing preview behavior, but is not tool use.
+		p.takeToolUse()
 		m.status = p.Status()
 	}
 }
@@ -1167,7 +1230,7 @@ func (m *model) copyOutput() {
 		m.status = errorStyle.Render("copy failed: " + err.Error())
 		return
 	}
-	m.status = successStyle.Render("copied output")
+	m.status = successStyle.Render("Copied")
 }
 
 func (m *model) saveOutput() {
@@ -1213,7 +1276,7 @@ func (m *model) categoryStatus() string {
 		return "No category selected"
 	}
 	if cat.Subcategory != "" {
-		return fmt.Sprintf("category %s/%s | %d tools", cat.Category, cat.Subcategory, len(cat.Tabs))
+		return fmt.Sprintf("category %s / %s | %d tools", cat.Category, subgroupDisplayName(cat.Subcategory), len(cat.Tabs))
 	}
 	return fmt.Sprintf("category %s | %d tools", cat.Category, len(cat.Tabs))
 }
@@ -1448,7 +1511,7 @@ func toolUsesInput(t tool.Tool) bool {
 
 func sectionLabel(title string, active bool, editing bool) string {
 	if active && editing {
-		return activeLabelStyle.Render(" " + title + " ")
+		return focusStyle.Render(" " + title + " ")
 	}
 	if active {
 		return panelTitleStyle.Render("> " + title)

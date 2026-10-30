@@ -175,7 +175,7 @@ func TestUnifiedWorkspaceInputlessActionPreservesHiddenInput(t *testing.T) {
 	selectWorkspaceTool(t, &m, "time.now")
 	p = m.currentPage().(*genericToolPage)
 	p.Run()
-	if strings.Contains(stripANSI(p.View()), "─Input") {
+	if strings.HasPrefix(stripANSI(p.View()), " Input ") {
 		t.Fatal("no-input action shows Input")
 	}
 	selectWorkspaceTool(t, &m, "time.from")
@@ -324,7 +324,7 @@ func TestUnifiedWorkspaceAllRegisteredToolsFit(t *testing.T) {
 					t.Fatal("workspace exceeds terminal")
 				}
 				toolsHeight := clamp(m.toolRows(m.width-clamp(m.width*20/100, 22, max(22, m.width-60))-2)+2, 3, max(3, m.height-2-8))
-				budget := panelContentHeight(m.height-2-toolsHeight) - 4
+				budget := panelContentHeight(m.height-2-toolsHeight) - 1
 				if lipgloss.Height(page.View()) > budget {
 					t.Fatalf("page uses %d rows, budget %d", lipgloss.Height(page.View()), budget)
 				}

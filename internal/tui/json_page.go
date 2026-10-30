@@ -39,14 +39,13 @@ type jsonToolPage struct {
 }
 
 func newJSONToolPage(t tool.Tool, tools map[string]tool.Tool) *jsonToolPage {
-	input := textarea.New()
-	input.Placeholder = ""
-	input.ShowLineNumbers = false
-	input.SetHeight(8)
-	input.Blur()
+	input := newWorkspaceInput()
 
 	pathBox := textinput.New()
 	pathBox.Placeholder = "gjson path, e.g. data.user.name"
+	pathBox.Prompt = ""
+	pathBox.TextStyle, pathBox.PlaceholderStyle = textStyle, dimStyle
+	pathBox.Cursor.Style = focusStyle
 	pathBox.Blur()
 
 	p := &jsonToolPage{
@@ -181,7 +180,7 @@ func (p *jsonToolPage) View() string {
 	if p.inputState != "" {
 		inputTitle += " - " + p.inputState
 	}
-	inputBlock := panelBoxTitle(inputTitle, p.active && p.editing && p.field == editFieldInput, workspaceInputView(p.input, p.active), p.width, p.inputBoxH)
+	inputBlock := workspaceSection(inputTitle, p.active && p.editing && p.field == editFieldInput, workspaceInputView(p.input, p.active, "Paste JSON with v, or i to edit"), p.width, p.inputBoxH)
 	var path strings.Builder
 	if p.field == editFieldOptions && p.editing {
 		path.WriteString(p.pathBox.View())
@@ -192,8 +191,13 @@ func (p *jsonToolPage) View() string {
 		}
 		path.WriteString(dimStyle.Render(value))
 	}
-	pathBlock := panelBoxTitle("Path", p.active && p.editing && p.field == editFieldOptions, path.String(), p.width, p.pathBoxH)
-	outputBlock := panelBoxTitle(p.workspacePreview.title(p.lastAction), false, p.output.View(), p.width, p.outputBoxH)
+	pathBlock := workspaceSection("Path", p.active && p.editing && p.field == editFieldOptions, path.String(), p.width, p.pathBoxH)
+	output := workspaceOutputView(p.output, p.outputText, p.lastAction, workspaceOutputHint(true, true))
+	selectedName := ""
+	if t := p.tools[p.selectedAction]; t != nil {
+		selectedName = t.Name()
+	}
+	outputBlock := workspaceSection(p.workspacePreview.title(p.lastAction, selectedName), false, output, p.width, p.outputBoxH)
 	if p.pathBoxH > 0 {
 		return lipgloss.JoinVertical(lipgloss.Left, inputBlock, pathBlock, outputBlock)
 	}
@@ -321,6 +325,16 @@ func (p *jsonToolPage) IsEditing() bool {
 	return p.editing
 }
 
+func (p *jsonToolPage) EditTarget() string {
+	if !p.editing {
+		return ""
+	}
+	if p.field == editFieldOptions {
+		return "Path"
+	}
+	return "Input"
+}
+
 // HandleKey handles JSON-specific normal-mode action shortcuts.
 func (p *jsonToolPage) HandleKey(key string) bool {
 	switch key {
@@ -371,6 +385,7 @@ func (p *jsonToolPage) runAction(id string, options tool.Options, preview bool) 
 			p.status = errorStyle.Render(err.Error())
 		} else {
 			p.status = successStyle.Render("valid JSON")
+			p.markToolUsed(id)
 		}
 		return
 	}
@@ -394,7 +409,8 @@ func (p *jsonToolPage) runAction(id string, options tool.Options, preview bool) 
 	p.outputText = out.Text
 	p.outputErr = false
 	p.renderOutput()
-	p.status = successStyle.Render("ran " + t.Name())
+	p.status = workspaceRunStatus(t, preview)
+	p.markToolUsed(id)
 }
 
 func (p *jsonToolPage) applyOutput() {

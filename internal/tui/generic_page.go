@@ -49,14 +49,13 @@ func newToolPage(t tool.Tool) toolPage {
 var specialPageFactories = map[string]func(tool.Tool) toolPage{}
 
 func newGenericToolPage(t tool.Tool) *genericToolPage {
-	input := textarea.New()
-	input.Placeholder = ""
-	input.ShowLineNumbers = false
-	input.SetHeight(8)
-	input.Blur()
+	input := newWorkspaceInput()
 
 	optionBox := textinput.New()
 	optionBox.Placeholder = "option=value option2=value2"
+	optionBox.Prompt = ""
+	optionBox.TextStyle, optionBox.PlaceholderStyle = textStyle, dimStyle
+	optionBox.Cursor.Style = focusStyle
 	if hasSecretOptions(t.Options()) {
 		// Secret 参数所在的整行使用密码模式，避免 HMAC key 等值在编辑时直接暴露。
 		optionBox.EchoMode = textinput.EchoPassword
@@ -239,7 +238,7 @@ func (p *genericToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 func (p *genericToolPage) View() string {
 	blocks := make([]string, 0, 4)
 	if p.hasInput {
-		blocks = append(blocks, panelBoxTitle("Input", p.active && p.editing && p.field == editFieldInput, workspaceInputView(p.input, p.active), p.width, p.inputBoxH))
+		blocks = append(blocks, workspaceSection("Input", p.active && p.editing && p.field == editFieldInput, workspaceInputView(p.input, p.active, workspaceInputHint(p.tool)), p.width, p.inputBoxH))
 	}
 
 	if p.hasOptions {
@@ -249,12 +248,13 @@ func (p *genericToolPage) View() string {
 		} else {
 			b.WriteString(dimStyle.Render(p.optionSummary()) + "\n")
 		}
-		blocks = append(blocks, panelBoxTitle("Options", p.active && p.editing && p.field == editFieldOptions, b.String(), p.width, p.optionsBoxH))
+		blocks = append(blocks, workspaceSection("Options", p.active && p.editing && p.field == editFieldOptions, b.String(), p.width, p.optionsBoxH))
 	} else {
 		// 无参数工具不再占一整块区域，把高度留给输入/输出。
 	}
 
-	blocks = append(blocks, panelBoxTitle(p.workspacePreview.title(p.lastAction), false, p.output.View(), p.width, p.outputBoxH))
+	output := workspaceOutputView(p.output, p.outputText, p.lastAction, workspaceOutputHint(canPreview(p.tool), p.hasInput))
+	blocks = append(blocks, workspaceSection(p.workspacePreview.title(p.lastAction, p.tool.Name()), false, output, p.width, p.outputBoxH))
 	return lipgloss.JoinVertical(lipgloss.Left, blocks...)
 }
 
@@ -354,7 +354,8 @@ func (p *genericToolPage) run(preview bool) {
 	p.outputText = out.Text
 	p.outputErr = false
 	p.renderOutput()
-	p.status = successStyle.Render("ran " + p.tool.ID())
+	p.status = workspaceRunStatus(p.tool, preview)
+	p.markToolUsed(p.tool.ID())
 }
 
 // SetInput replaces input text and records undo history.
@@ -412,7 +413,7 @@ func (p *genericToolPage) Status() string {
 
 // HelpText returns a compact help summary for legacy callers.
 func (p *genericToolPage) HelpText() string {
-	return fmt.Sprintf("%s | i edit | Esc back/exit edit | Tab field | r/Enter run | y copy | s save | p apply", p.tool.Name())
+	return fmt.Sprintf("%s | i/o Insert | Esc Normal/back | Tab area in Normal | r/Enter run | y copy | s save | p apply", p.tool.Name())
 }
 
 // HelpCommands returns structured commands for the popup help overlay.
@@ -448,6 +449,16 @@ func (p *genericToolPage) FooterHints() string {
 // IsEditing reports whether key events should be routed to a text editor.
 func (p *genericToolPage) IsEditing() bool {
 	return p.editing
+}
+
+func (p *genericToolPage) EditTarget() string {
+	if !p.editing {
+		return ""
+	}
+	if p.field == editFieldOptions {
+		return "Options"
+	}
+	return "Input"
 }
 
 func (p *genericToolPage) trackInputChange(before string) {
