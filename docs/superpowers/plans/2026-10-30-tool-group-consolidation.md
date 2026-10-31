@@ -1,0 +1,18 @@
+# Consolidate TUI tool groups
+
+**Goal:** Reduce the selectable Categories entries from 24 to 18 by consolidating Convert, Base64 variants, and generators, using region 2 for concrete actions.
+
+**Approved design:** Convert exposes JSON→YAML, YAML→JSON, CSV→JSON, Headers→JSON. Base64 exposes Standard Encode/Decode, URL Encode/Decode, Raw URL Encode/Decode. Generator exposes Password, Token, UUID v4 (retain Password as the default and keep Password/Token adjacent). These groups use explicit TUI metadata, independent of CLI command prefixes. Unrelated groups retain their current grouping. Search and history identify exact existing tool IDs.
+
+**Architecture:** Add `internal/tui/tool_groups.go` for scoped group metadata, action ordering, and group lookup. The same identity drives Categories and `workspaceKey`; `actionLabel` uses the metadata labels. Keep generic-page action drafts, Input/undo/output preservation, output provenance, and preview validation. Conversion previews with mismatched input retain the last result as stale. CLI and tool registrations stay unchanged.
+
+**Execution:** Work inline in the current workspace, preserving the pending URL/token and option-form changes. No automatic commit. No new dependency.
+
+- [x] Write failing `internal/tui/tool_groups_test.go` tests: exact merged rows/actions/counts/order, distinct labels, isolated JSON group, shared source/apply/reverse/undo, mismatched preview staleness and provenance, Base64 variants and round trips, generator draft/field restoration without implicit generation, search aliases/exact action/history restoration, every-action frame sizes. Run `go test ./internal/tui -run '^TestConsolidated' -count=1` and inspect failures.
+- [x] Implement explicit group metadata, shared group identity, labels and action ordering. Update existing expectations that intentionally describe the former grouping, retaining their original behavioral checks.
+- [x] Run targeted tests and `go test ./... -count=1`. Review the diff for unrelated changes and validate that existing IDs/CLI commands and isolated workspaces remain intact.
+- [x] Update English/Chinese README and changelog for the merged entries and exact action names. Run `go vet ./...`, `git diff --check`, build, and real PTY smoke at 80×24, 120×40, 160×50. Inspect every action label and footer, conversion directions, generator navigation without generation, search/history group restoration.
+
+**Verification:** The new integration tests first failed with 24 entries, separate conversion/Base64/UUID groups, ambiguous labels, and missing shared-state/history behavior. They pass after the scoped grouping change. Existing expectations for Convert search hierarchy and Base64 display names were updated to the new design. Group action ordering now follows explicit metadata while unrelated group order is preserved. Action labels and layout budgets use terminal display widths so conversion arrows do not distort wrapping.
+
+`go test ./... -count=1`, `go vet ./...`, `git diff --check`, and `go build -o /tmp/sharp-consolidated-20261030 ./cmd/sharp` passed. A temporary PTY test harness exercised the real Bubble Tea program with session-only history at 80×24, 120×40, and 160×50. It verified every action label and footer, conversion/apply/reverse/stale provenance, Base64 selection, generator navigation without generation, and opening recent conversions. The capture script needed incremental UTF-8 decoding to avoid splitting arrow and border characters across reads; no application change was needed. All terminal checks then passed. Captures are in `/tmp/sharp-consolidated-preview/`; the temporary Go harness was removed. User history was not read or written. No automatic commit.

@@ -34,19 +34,39 @@ The project is designed for everyday developer workflows: paste data, transform 
 
 ## Installation
 
-Install the latest version from source:
-
-```bash
-go install github.com/gkmz/sharp/cmd/sharp@latest
-```
-
-Install from a local checkout:
+Release packaging is prepared for the first `v0.1.0`; it has not been published yet. Until then, install from a local checkout or try the current main branch with `go install github.com/gkmz/sharp/cmd/sharp@main` (requires Go 1.25.1+).
 
 ```bash
 git clone https://github.com/gkmz/sharp.git
 cd sharp
 go install ./cmd/sharp
 ```
+
+Go installs into `go env GOBIN`, or `$(go env GOPATH)/bin` when GOBIN is empty. For the usual default, put Go's bin directory **before** older Sharp installations in your shell PATH:
+
+```bash
+export PATH="$(go env GOPATH)/bin:$PATH"
+command -v sharp
+sharp version
+```
+
+Add the export to your shell startup file (for zsh, `~/.zshrc`). A custom GOBIN needs its own PATH entry. If an older `/usr/local/bin/sharp` still runs, inspect `type -a sharp` and refresh the shell's command cache (`rehash` in zsh). To update from this checkout, rerun `go install ./cmd/sharp`.
+
+After the first release is published, [GitHub Releases](https://github.com/gkmz/sharp/releases) will provide macOS/Linux archives for amd64 and arm64, with LICENSE, both READMEs and `checksums.txt`. Go users can then install `go install github.com/gkmz/sharp/cmd/sharp@v0.1.0` (fixed version) or `@latest` (latest stable module version). Homebrew distribution is planned separately.
+
+For a release archive, select `darwin_arm64` for Apple Silicon, `darwin_amd64` for Intel Macs, or the corresponding Linux architecture (`uname -s; uname -m`). Download the archive and `checksums.txt` from the same Release into an empty directory, then verify the selected file (the following name is an example for the first Apple Silicon release):
+
+```bash
+# After v0.1.0 is published and downloaded:
+grep '  sharp_0.1.0_darwin_arm64.tar.gz$' checksums.txt | shasum -a 256 -c -
+tar -xzf sharp_0.1.0_darwin_arm64.tar.gz
+mkdir -p "$HOME/.local/bin"
+install -m 755 sharp "$HOME/.local/bin/sharp"
+export PATH="$HOME/.local/bin:$PATH"
+sharp version
+```
+
+On Linux use `sha256sum -c -` in place of `shasum -a 256 -c -` and the Linux archive name. Checksums detect corruption; binaries/checksums are not signed, and macOS releases are not notarized. Persist the chosen PATH entry in your shell configuration. Release archives need no Go installation. Clipboard functions on Linux need xclip/xsel and an available graphical clipboard session; ordinary CLI transformations do not.
 
 Run directly during development:
 
@@ -62,35 +82,66 @@ Start the interactive app:
 sharp
 ```
 
-The TUI is organized into four numbered regions:
+The TUI has three numbered regions:
 
 | Region | Purpose |
 | --- | --- |
-| `1 Search` | Search categories, subcategories, and concrete tools. |
-| `2 Categories` | Select a category or subcategory. Parent categories with subcategories are headers only. |
-| `3 Tools` | Select tools in the current subcategory. JSON uses one Workspace page. |
-| `4 Workspace` | Work with input, options/path, actions, and output. |
+| `1 Categories` | Browse categories and subcategories with j/k or arrows. Press s to search. |
+| `2 Actions` | Select an action in the current tool group, such as Encode/Decode or Pretty/Minify. |
+| `3 Workspace` | Edit input/options, preview or run the selected action, and inspect output. |
 
-Common shortcuts:
+There is no permanent search box. Categories starts in Normal mode: `j/k` or Up/Down selects the next/previous entry, skips category headings, and scrolls the list to keep the selection visible. Press `s` to enter Search, then type `json`, `minify`, or another tool name. In Search, letters including `j`, `k`, `s`, and `q` are text; Up/Down selects results, Enter opens, and Esc clears the filter and returns to Normal Categories. Deleting the whole query keeps Search active. A single tool opens directly in the workspace. Opening a result clears the filter and restores its full action group. `/` also starts search from any region outside edit mode. In Actions and Workspace, `s` continues to save Output.
+
+Related tools share a Categories entry, with concrete operations in Actions:
+
+| Categories entry | Actions |
+| --- | --- |
+| `Convert` | JSON→YAML, YAML→JSON, CSV→JSON, Headers→JSON |
+| `Encode → Base64` | Standard Encode/Decode, URL Encode/Decode, Raw URL Encode/Decode |
+| `Generator` | Password, Token, UUID v4 |
+
+This keeps 57 actions available through 18 selectable entries. Conversion directions and Base64 variants stay visible in Actions. Switching conversion actions preserves Input; use `p` to apply a result before converting it back. If Input does not match the selected conversion, the previous preview remains marked `stale` with its source action. Generator actions share the result area and remember their own options; switching between Password, Token and UUID never generates a new value. Existing CLI commands, search names, and recent-tool IDs still locate the concrete actions.
+
+All tool groups use the same workspace rules. Actions within a group share input, output, and input undo history: format conversions, Base64 variants, text transformations, hash algorithms, and regex Match/Replace all keep the current document when switching. Each action remembers its own options in memory; unrelated categories and subgroups keep separate documents. Output titles identify the action that produced the result.
+
+Press `Ctrl+R` (`^R` in the footer) in Normal mode to open the five most recently used tool actions. Use Up/Down and Enter to open the exact action in Workspace, or Esc to return. Opening a recent tool restores its complete action group without running it. Successful runs and valid previews after pasting/editing update the list; browsing actions, opening search results, and failed previews do not. History survives restarts and stores only tool IDs, never input, output, or options, in `sharp/recent-tools.json` under the OS user configuration directory (`~/Library/Application Support` on macOS, `$XDG_CONFIG_HOME` or `~/.config` on Linux). If storage is unavailable, history still works for the current session.
+
+Normal mode handles commands and navigation; only `i` or `o` enters an editor. Tab/Shift+Tab cycle Categories → Actions → Workspace. Use `[`/`]` from any region to switch actions without moving focus, or Left/Right and `h/l` in Actions. Known local transformations preview immediately after `v` paste or action changes, and about 200ms after editing stops; Esc ends editing and flushes the preview. DNS lookup, current time, and random generators run only on `r` or Enter. Options appear only when the action has parameters: `o` edits them, Enter runs, and Esc finishes editing. Inputless actions hide Input while preserving the group's document for other actions.
+
+The footer identifies the active mode with a text and color badge: `NORMAL` for navigation, `INSERT Input/Options/Path` for editing, `SEARCH Categories` for search, and `HELP Commands` for help. The active Workspace border also identifies its mode and edited field. In Insert, the footer explains whether Enter adds a newline or runs the action. Esc closes one layer at a time: Help → its previous context; search → unfiltered Categories; Insert → Workspace Normal → Actions → Categories. Esc in unfiltered Categories leaves the document and operation feedback intact.
+
+Green borders identify the focused region; blue marks the active selection and a quieter style preserves selections in other regions. Input, Options/Path, and Output use open sections inside Workspace. Empty sections show contextual guidance without adding text to the document or result. Colors adapt to light and dark terminal backgrounds; font family and size follow your terminal settings.
+
+JSON follows the same rules with Pretty, Minify, Sort, Query, Escape, Unescape, and Check. Path appears only for Query; Enter in Path queries the shared input. Check reports validation in the status line. Across all groups, `p`/`a` applies a successful result to Input and clears Output; errors cannot be applied. While input or options are incomplete, the previous result stays visible as `stale`; copy, save, and Apply are blocked until a fresh result is available.
+
+Input and Output do not need to be selected. Press `i` to edit Input directly, or `o` for Options/Path. Enter inserts a newline in Input; in Options/Path it executes and returns to Normal. Options use a form with fixed parameter labels and one editable value per row. Tab/Shift+Tab moves between option fields; Left/Right selects enumerated values such as URL mode or token format. Text values accept spaces, quotes, backslashes, and `=` literally, with no extra quoting. Secret fields, such as HMAC keys, are masked individually. Tab stays in the form; use Esc before switching regions. In Input, Tab does not navigate. In Normal mode, arrows in Workspace scroll Output. `?` lists available commands and option descriptions. Operation feedback appears above the shortcut hints.
+
+Common shortcuts outside edit mode:
 
 | Key | Action |
 | --- | --- |
-| `1`, `2`, `3`, `4` | Focus a region. |
-| `/` | Open search. |
-| `j` / `k` | Move in the category list. |
-| `h` / `l` | Move between tools in region 3. |
-| `i` or `Enter` | Edit input when the current tool accepts input. |
-| `o` | Edit options, or JSON path in the JSON workbench. |
-| `r` | Run the current tool or default action. |
-| `v` | Paste clipboard data into input. |
+| Tab / Shift+Tab | Cycle regions forward / backward in Normal mode. |
+| `[` / `]` | Select the previous / next action without changing region. |
+| `1`, `2`, `3` | Focus Categories, Actions, or Workspace. |
+| `s` in Categories / `/` in Normal mode | Start inline tool search. |
+| `Ctrl+R` | Open the five most recently used actions in Normal mode; Enter opens without running, Esc closes. |
+| `j/k` in Categories / Up / Down | Select the next/previous category; arrows select search results or scroll Output in Workspace. |
+| Left / Right or `h` / `l` | Select an action in region 2. |
+| Enter | Open the category selection; run the selected tool/action in regions 2 and 3. |
+| `i` | Edit Input directly. |
+| `o` | Edit options, or Path when JSON Query is selected. |
+| `r` | Run the selected tool or action. |
+| `v` | Paste clipboard data into Input and preview, staying in Normal mode. |
 | `x` / `X` | Clear input / clear output. |
 | `y` | Copy trimmed output. |
 | `s` | Save trimmed output to `sharp-output.txt`. |
-| `p` | Pipe output back into input for chaining. |
+| `p` / `a` | Apply output to input for chaining. |
+| `z` | Undo input changes; Ctrl+Z/Ctrl+Y undo/redo while editing Input. |
 | `ctrl+u` / `ctrl+d` | Scroll output by half a page. |
 | `alt+u` / `alt+d` | Scroll input by half a page. |
+| Esc | Leave editing → Workspace → Actions → Categories; clear an active search filter. |
 | `?` | Open searchable command help. |
-| `q` | Quit from normal mode. |
+| `ctrl+c` / `ctrl+q` | Quit from any region; `q` also quits in Normal mode; Search and editors treat it as text. |
 
 ## CLI Usage
 
@@ -125,19 +176,114 @@ sharp jwt decode "$JWT"
 
 CLI input can come from an argument, a file path, or stdin.
 
+`time from` infers units from the digit count after removing the sign and leading zeros: 1–12 digits are seconds, 13–18 are milliseconds, and 19 are nanoseconds (within signed 64-bit range). Shorter nanosecond values are ambiguous and are not detected as nanoseconds; for example, `946684800000000000` is interpreted as milliseconds. Convert such values to seconds or milliseconds before use; an explicit unit selector is not currently available.
+
+YAML conversion supports merge keys (`<<`), with explicit fields overriding merged fields and earlier mappings in a merge sequence taking precedence. Alias cycles and duplicate normalized keys are rejected. Conversion limits are 16 MiB of input before parsing, 100,000 expanded node visits, 16 MiB of expanded scalar text (including keys), and 256 nested nodes.
+
+### URL values and random tokens
+
+URL Encode/Decode is under **Encode → URL**. The default `mode=query` uses form/query rules: space becomes `+`, and decoding `+` produces a space. Choose `mode=component` for individual URI values such as a database connection password: only letters, digits, and `-._~` remain unescaped, space becomes `%20`, and decoding preserves literal `+`. Encode the password value before inserting it into the connection URI.
+
+```bash
+sharp url encode --mode component '^@#$ a+b'
+# %5E%40%23%24%20a%2Bb
+sharp url decode --mode component 'a+b%2Bc'
+# a+b+c
+```
+
+Token remains under **Generator → Token**. `bytes` specifies random bytes before encoding, from 1 to 4096; it does not specify output characters. `format=hex` uses lowercase, `format=base64` uses standard Base64 with padding, and `format=base64url` uses URL-safe Base64 without padding. Defaults remain `bytes=32 format=base64url`. All formats use `crypto/rand` and return a single line.
+
+```bash
+sharp token --bytes 32 --format hex
+sharp token --bytes 64 --format base64
+sharp token --bytes 32 --format base64url
+```
+
+| Random bytes | Hex characters | Base64 characters | Base64URL characters |
+| --- | ---: | ---: | ---: |
+| 32 | 64 | 44 | 43 |
+| 64 | 128 | 88 | 86 |
+
+In the TUI, press `o` to edit the Options form. For URL, select `component` with Left/Right. For Token, edit the `bytes` value, press Tab to select `format`, then use Left/Right to choose `hex`, `base64`, or `base64url`. Parameter names are fixed; only values can change. URL input/options support live previews. For Token, Enter in Options generates a result and returns to Normal; Esc keeps the draft without generating. `r` generates explicitly and `y` copies the result. Each action retains its own option draft during the session.
+
 ## Tool Categories
 
 | Category | Tools |
 | --- | --- |
 | ![JSON](https://img.shields.io/badge/JSON-workbench-2EA44F) | `pretty`, `minify`, `validate`, `get`, `sort`, `escape`, `unescape` |
-| ![Encode](https://img.shields.io/badge/Encode-code-blue) | Base64, Base64 URL, raw Base64 URL, URL, Hex, HTML, Unicode |
+| ![Encode](https://img.shields.io/badge/Encode-code-blue) | Base64, Base64 URL, raw Base64 URL, URL (query/component), Hex, HTML, Unicode |
 | ![Crypto](https://img.shields.io/badge/Crypto-hash-critical) | CRC32, MD5, SHA1, SHA224, SHA256, SHA384, SHA512, HMAC SHA256, HMAC SHA512 |
 | ![Time](https://img.shields.io/badge/Time-timestamp-yellow) | current time, timestamp to time, time to timestamp |
 | ![Text](https://img.shields.io/badge/Text-transform-informational) | uppercase, lowercase, trim, case conversion, sort, unique, count, regex test, regex replace |
 | ![Network](https://img.shields.io/badge/Network-parse-9cf) | URL parse, query parse, DNS lookup, CIDR parse |
 | ![Convert](https://img.shields.io/badge/Convert-format-success) | JSON to YAML, YAML to JSON, CSV to JSON, HTTP headers to JSON |
 | ![Inspector](https://img.shields.io/badge/Inspector-JWT-lightgrey) | JWT decode without signature verification |
-| ![Generator](https://img.shields.io/badge/Generator-random-orange) | UUID v4, random password, random token |
+| ![Generator](https://img.shields.io/badge/Generator-random-orange) | UUID v4, random password, random token (Hex/Base64/Base64URL) |
+
+## Tool Roadmap
+
+The checklist below tracks future tool expansion. Existing capabilities are listed in **Tool Categories** above; unchecked items are planned and are not available yet. Priorities indicate the suggested implementation order, not release commitments.
+
+Keep sharp focused on local, composable data and text workflows. A tool is complete when its shared implementation works in both CLI and TUI, relevant tests pass, and the English and Chinese documentation is updated. Check off each item as it ships; proposed command names may change during implementation.
+
+### P0 — Everyday workflows
+
+- [ ] Text diff: compare two inputs and show additions, deletions, and unchanged context.
+- [ ] Number base converter: binary, octal, decimal, and hexadecimal.
+- [ ] JSON to CSV: complement the existing CSV to JSON converter.
+- [ ] String inspector: extend text counts with Unicode code points, invisible characters, and byte details.
+- [ ] Backslash escape/unescape: define supported escape rules explicitly alongside existing JSON and Go-style Unicode tools.
+- [ ] Random string generator: configurable length and character set, alongside passwords and tokens.
+- [ ] Cron parser: explain expressions and show upcoming runs with an explicit time zone.
+- [ ] Color converter: HEX, RGB, HSL, HSV, and CMYK.
+- [ ] X.509 certificate decoder: inspect PEM/DER certificate fields, validity, SANs, and fingerprints locally.
+- [ ] cURL parser: extract method, URL, headers, and body without executing the command.
+- [ ] Query string builder: build a query string from structured parameters, complementing query parsing.
+- [ ] JWT signature verification: extend the existing decoder with explicit algorithm and key options.
+
+### P1 — Formatting and structured data
+
+- [ ] HTML beautify/minify.
+- [ ] CSS beautify/minify.
+- [ ] JavaScript/TypeScript beautify/minify.
+- [ ] XML beautify/minify.
+- [ ] SQL formatter with explicit dialect selection.
+- [ ] JSON to code: start with Go structs and TypeScript interfaces; consider Java and Python later.
+- [ ] TOML ↔ JSON conversion.
+- [ ] ENV ↔ JSON conversion.
+- [ ] INI ↔ JSON conversion.
+- [ ] Markdown terminal preview.
+- [ ] HTTP request builder and sender with timeouts and readable response output.
+- [ ] TLS certificate inspector: fetch and inspect certificates from a remote endpoint.
+- [ ] IP inspector: local address classification and subnet details.
+- [ ] Port connectivity checker.
+- [ ] MIME type lookup.
+- [ ] Data URI parser.
+- [ ] cURL to code: generate request snippets from parsed commands.
+- [ ] UUID/ULID tools: add ULID generation and UUID/ULID inspection alongside UUID v4 generation.
+
+### P2 — Specialized and visual tools
+
+- [ ] QR code generator.
+- [ ] QR code reader from image files.
+- [ ] Base64 image encode/decode with file and Data URI support.
+- [ ] HTML browser preview.
+- [ ] HTML to JSX conversion.
+- [ ] SVG to CSS conversion.
+- [ ] Lorem Ipsum generator.
+- [ ] PHP ↔ JSON conversion.
+- [ ] PHP serialize/unserialize.
+- [ ] ERB beautify/minify.
+- [ ] LESS beautify/minify.
+- [ ] SCSS beautify/minify.
+
+### Supporting capabilities
+
+Implement these as needed by the tools above:
+
+- [ ] Two-input CLI/TUI workspace for text diff and other comparison tools.
+- [ ] Explicit text/file/binary input handling and file output that preserves raw bytes.
+- [ ] MIME-aware output handling for structured text, images, and previews.
 
 ## Development
 
@@ -148,6 +294,7 @@ Requirements:
 Useful commands:
 
 ```bash
+make verify
 make test
 make run
 make build
@@ -155,11 +302,7 @@ make fmt
 make tidy
 ```
 
-Build with a release version:
-
-```bash
-go build -ldflags "-X github.com/gkmz/sharp/internal/cli.Version=0.1.0" ./cmd/sharp
-```
+Local source builds report `dev` and the VCS revision (with `-dirty` for uncommitted changes). Release packages include the version, commit and UTC build date; `go install ...@version` reports Go module version metadata. See the [release guide](docs/RELEASING.md) for verified snapshots, tag preparation and draft review.
 
 In sandboxed environments where the default Go build cache is not writable, use:
 
@@ -185,6 +328,7 @@ docs                   Product and development notes
 - [Code of Conduct](./docs/CODE_OF_CONDUCT.md)
 - [Security Policy](./docs/SECURITY.md)
 - [Changelog](./docs/CHANGELOG.md)
+- [Release Guide](docs/RELEASING.md)
 - [Product Requirements](docs/PRD.md)
 - [Development Plan](docs/DEVELOPMENT_PLAN.md)
 

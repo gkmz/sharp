@@ -8,6 +8,8 @@ import (
 	"html"
 	"net/url"
 	"strconv"
+	"strings"
+	"unicode"
 
 	"github.com/gkmz/sharp/pkg/tool"
 )
@@ -21,22 +23,46 @@ func Register(r *tool.Registry) {
 	base64Tool(r, "b64rawurl.encode", "Raw Base64 URL Encode", base64.RawURLEncoding.EncodeToString)
 	base64DecodeTool(r, "b64rawurl.decode", "Raw Base64 URL Decode", base64.RawURLEncoding.DecodeString)
 
+	urlModeOption := tool.Option{
+		Name: "mode", Default: "query", Choices: []string{"query", "component"},
+		Description: "query: form/query values (space as +); component: URI values such as database passwords (space as %20, literal + preserved on decode)",
+	}
 	r.MustRegister(tool.SimpleTool{
 		IDValue:          "url.encode",
 		NameValue:        "URL Encode",
 		CategoryValue:    tool.CategoryEncode,
-		DescriptionValue: "Percent-encode text for URLs.",
+		DescriptionValue: "Percent-encode a URL value in query or component mode.",
+		OptionsValue:     []tool.Option{urlModeOption},
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			return tool.Output{Text: url.QueryEscape(input.Text)}, nil
+			mode, err := urlMode(options)
+			if err != nil {
+				return tool.Output{}, err
+			}
+			encoded := url.QueryEscape(input.Text)
+			if mode == "component" {
+				// QueryEscape already escapes everything except RFC 3986
+				// unreserved bytes and spaces. Literal plus is escaped as %2B.
+				encoded = strings.ReplaceAll(encoded, "+", "%20")
+			}
+			return tool.Output{Text: encoded}, nil
 		},
 	})
 	r.MustRegister(tool.SimpleTool{
 		IDValue:          "url.decode",
 		NameValue:        "URL Decode",
 		CategoryValue:    tool.CategoryEncode,
-		DescriptionValue: "Decode percent-encoded URL text.",
+		DescriptionValue: "Decode a URL value in query or component mode.",
+		OptionsValue:     []tool.Option{urlModeOption},
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			s, err := url.QueryUnescape(input.Text)
+			mode, err := urlMode(options)
+			if err != nil {
+				return tool.Output{}, err
+			}
+			decode := url.QueryUnescape
+			if mode == "component" {
+				decode = url.PathUnescape // Percent-decode without changing literal +.
+			}
+			s, err := decode(input.Text)
 			if err != nil {
 				return tool.Output{}, err
 			}
@@ -58,7 +84,7 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryEncode,
 		DescriptionValue: "Decode hex text.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			b, err := hex.DecodeString(input.Text)
+			b, err := hex.DecodeString(removeEncodingWhitespace(input.Text))
 			if err != nil {
 				return tool.Output{}, err
 			}
@@ -107,6 +133,17 @@ func Register(r *tool.Registry) {
 	})
 }
 
+func urlMode(options tool.Options) (string, error) {
+	switch mode := options["mode"]; mode {
+	case "", "query":
+		return "query", nil
+	case "component":
+		return mode, nil
+	default:
+		return "", fmt.Errorf("mode must be query or component")
+	}
+}
+
 func base64Tool(r *tool.Registry, id string, name string, fn func([]byte) string) {
 	r.MustRegister(tool.SimpleTool{
 		IDValue:          id,
@@ -126,11 +163,21 @@ func base64DecodeTool(r *tool.Registry, id string, name string, fn func(string) 
 		CategoryValue:    tool.CategoryEncode,
 		DescriptionValue: fmt.Sprintf("%s text.", name),
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			b, err := fn(input.Text)
+			b, err := fn(removeEncodingWhitespace(input.Text))
 			if err != nil {
 				return tool.Output{}, err
 			}
 			return tool.Output{Text: string(b)}, nil
 		},
 	})
+}
+
+func removeEncodingWhitespace(s string) string {
+	// 编码文本经常来自复制粘贴或换行展示，解码前去掉空白能避免无意义的格式错误。
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
 }

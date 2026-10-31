@@ -28,7 +28,7 @@ func Register(r *tool.Registry) {
 		CategoryValue:    tool.CategoryText,
 		DescriptionValue: "Sort lines alphabetically.",
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
-			lines := strings.Split(strings.ReplaceAll(input.Text, "\r\n", "\n"), "\n")
+			lines := splitInputLines(input.Text)
 			sort.Strings(lines)
 			return tool.Output{Text: strings.Join(lines, "\n")}, nil
 		},
@@ -41,7 +41,7 @@ func Register(r *tool.Registry) {
 		RunFunc: func(ctx context.Context, input tool.Input, options tool.Options) (tool.Output, error) {
 			seen := map[string]bool{}
 			var out []string
-			for _, line := range strings.Split(strings.ReplaceAll(input.Text, "\r\n", "\n"), "\n") {
+			for _, line := range splitInputLines(input.Text) {
 				if !seen[line] {
 					seen[line] = true
 					out = append(out, line)
@@ -100,6 +100,16 @@ func Register(r *tool.Registry) {
 	})
 }
 
+func splitInputLines(s string) []string {
+	normalized := strings.ReplaceAll(s, "\r\n", "\n")
+	lines := strings.Split(normalized, "\n")
+	if len(lines) > 1 && lines[len(lines)-1] == "" {
+		// 文本文件常以换行结尾；尾随换行不应在 sort/uniq 中额外制造一个空行。
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
 func textTool(r *tool.Registry, id string, name string, description string, fn func(string) string) {
 	r.MustRegister(tool.SimpleTool{
 		IDValue:          id,
@@ -113,12 +123,61 @@ func textTool(r *tool.Registry, id string, name string, description string, fn f
 }
 
 func words(s string) []string {
-	re := regexp.MustCompile(`[A-Za-z0-9]+`)
-	parts := re.FindAllString(s, -1)
-	for i := range parts {
-		parts[i] = strings.ToLower(parts[i])
+	parts := make([]string, 0)
+	var current []rune
+	runes := []rune(s)
+	for i, r := range runes {
+		if !isWordRune(r) {
+			if len(current) > 0 {
+				parts = append(parts, lowerRunes(current))
+				current = current[:0]
+			}
+			continue
+		}
+		if len(current) > 0 && shouldSplitWord(current[len(current)-1], r, nextWordRune(runes, i+1)) {
+			parts = append(parts, lowerRunes(current))
+			current = current[:0]
+		}
+		current = append(current, r)
+	}
+	if len(current) > 0 {
+		parts = append(parts, lowerRunes(current))
 	}
 	return parts
+}
+
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+func shouldSplitWord(prev rune, current rune, next rune) bool {
+	if unicode.IsDigit(prev) || unicode.IsDigit(current) {
+		return false
+	}
+	if unicode.IsUpper(current) && (unicode.IsLower(prev) || isUncasedLetter(prev)) {
+		return true
+	}
+	// 缩写后接普通词时在最后一个大写字母前拆分，例如 HTTPServer -> HTTP + Server。
+	return unicode.IsUpper(prev) && unicode.IsUpper(current) && next != 0 && unicode.IsLower(next)
+}
+
+func isUncasedLetter(r rune) bool {
+	return unicode.IsLetter(r) && !unicode.IsUpper(r) && !unicode.IsLower(r)
+}
+
+func nextWordRune(runes []rune, start int) rune {
+	if start < len(runes) && isWordRune(runes[start]) {
+		return runes[start]
+	}
+	return 0
+}
+
+func lowerRunes(runes []rune) string {
+	var b strings.Builder
+	for _, r := range runes {
+		b.WriteRune(unicode.ToLower(r))
+	}
+	return b.String()
 }
 
 func camel(s string) string {

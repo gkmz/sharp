@@ -99,6 +99,7 @@ func TestJSONTools(t *testing.T) {
 		options  tool.Options
 		want     string
 		contains []string
+		mime     string
 	}{
 		{name: "minify", id: "json.minify", input: "{\n  \"b\": 2\n}", want: `{"b":2}`},
 		{name: "validate", id: "json.validate", input: `{"ok":true}`, want: "valid JSON"},
@@ -106,10 +107,14 @@ func TestJSONTools(t *testing.T) {
 		{name: "escape", id: "json.escape", input: `{"a":1}`, want: `"{\"a\":1}"`},
 		{name: "unescape", id: "json.unescape", input: `"{\"a\":1}"`, want: `{"a":1}`},
 		{name: "get", id: "json.get", input: `{"data":{"name":"sharp"}}`, options: tool.Options{"path": "data.name"}, want: "sharp"},
+		{name: "get null", id: "json.get", input: `{"data":{"name":null}}`, options: tool.Options{"path": "data.name"}, want: "null", mime: "application/json"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			out := runTool(t, tt.id, tt.input, tt.options)
+			if tt.mime != "" && out.MimeType != tt.mime {
+				t.Fatalf("%s mime=%q, want %q", tt.id, out.MimeType, tt.mime)
+			}
 			if tt.want != "" && out.Text != tt.want {
 				t.Fatalf("%s output = %q, want %q", tt.id, out.Text, tt.want)
 			}
@@ -119,6 +124,43 @@ func TestJSONTools(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestLossyJSONTransformsRejectDuplicateObjectKeys(t *testing.T) {
+	cases := []struct {
+		id    string
+		input string
+	}{
+		{id: "json.sort", input: `{"a":1,"a":2}`},
+		{id: "json.sort", input: `{"nested":{"a":1,"a":2}}`},
+		{id: "json.to_yaml", input: `{"a":1,"a":2}`},
+		{id: "json.to_yaml", input: `{"nested":{"a":1,"a":2}}`},
+	}
+	registry := tools.NewRegistry()
+	for _, tt := range cases {
+		t.Run(tt.id, func(t *testing.T) {
+			current, ok := registry.Get(tt.id)
+			if !ok {
+				t.Fatalf("tool %q not registered", tt.id)
+			}
+			_, err := current.Run(context.Background(), tool.Input{Text: tt.input}, nil)
+			if err == nil || !strings.Contains(err.Error(), `duplicate JSON object key "a"`) {
+				t.Fatalf("%s error = %v, want duplicate key error", tt.id, err)
+			}
+		})
+	}
+}
+
+func TestJSONGetRejectsDuplicateObjectKeys(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("json.get")
+	if !ok {
+		t.Fatal("json.get not registered")
+	}
+	_, err := current.Run(context.Background(), tool.Input{Text: `{"a":1,"a":2}`}, tool.Options{"path": "a"})
+	if err == nil || !strings.Contains(err.Error(), `duplicate JSON object key "a"`) {
+		t.Fatalf("json.get error = %v, want duplicate key error", err)
 	}
 }
 
@@ -147,6 +189,27 @@ func TestEncodeTools(t *testing.T) {
 	}
 }
 
+func TestDecodeToolsIgnoreFormattingWhitespace(t *testing.T) {
+	cases := []struct {
+		id    string
+		input string
+		want  string
+	}{
+		{id: "b64.decode", input: "aGVs bG8=", want: "hello"},
+		{id: "b64.decode", input: "aGVs\nbG8=", want: "hello"},
+		{id: "hex.decode", input: "68 65 6c 6c 6f", want: "hello"},
+		{id: "hex.decode", input: "68\t65\n6c 6c 6f", want: "hello"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.id+" whitespace", func(t *testing.T) {
+			out := runTool(t, tt.id, tt.input, nil)
+			if out.Text != tt.want {
+				t.Fatalf("%s output = %q, want %q", tt.id, out.Text, tt.want)
+			}
+		})
+	}
+}
+
 func TestCryptoTools(t *testing.T) {
 	cases := []struct {
 		id      string
@@ -165,6 +228,20 @@ func TestCryptoTools(t *testing.T) {
 				t.Fatalf("%s output = %q, want %q", tt.id, out.Text, tt.want)
 			}
 		})
+	}
+}
+
+func TestHMACRejectsEmptyKey(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("hmac.sha256")
+	if !ok {
+		t.Fatal("hmac.sha256 not registered")
+	}
+	for _, options := range []tool.Options{nil, {"key": ""}, {"key": "   "}} {
+		_, err := current.Run(context.Background(), tool.Input{Text: "hello"}, options)
+		if err == nil || !strings.Contains(err.Error(), "missing required option: key") {
+			t.Fatalf("hmac.sha256 error = %v, want missing key error", err)
+		}
 	}
 }
 
@@ -187,6 +264,33 @@ func TestTimeTools(t *testing.T) {
 	}
 }
 
+func TestTimeFromDetectsUnitsByDigitCount(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{name: "positive seconds", input: "999999999999", want: []string{"Unix seconds: 999999999999", "Unix milliseconds: 999999999999000", "Unix nanoseconds: 999999999999000000000"}},
+		{name: "negative seconds", input: "-999999999999", want: []string{"Unix seconds: -999999999999", "Unix milliseconds: -999999999999000", "Unix nanoseconds: -999999999999000000000"}},
+		{name: "zero-padded positive seconds", input: "0000000000001", want: []string{"Unix seconds: 1", "Unix milliseconds: 1000"}},
+		{name: "zero-padded negative seconds", input: "-0000000000001", want: []string{"Unix seconds: -1", "Unix milliseconds: -1000"}},
+		{name: "zero timestamp", input: "0000000000000", want: []string{"Unix seconds: 0", "Unix milliseconds: 0"}},
+		{name: "positive milliseconds", input: "1000000000000", want: []string{"Unix seconds: 1000000000", "Unix milliseconds: 1000000000000"}},
+		{name: "negative milliseconds", input: "-1000000000000", want: []string{"Unix seconds: -1000000000", "Unix milliseconds: -1000000000000"}},
+		{name: "positive nanoseconds", input: "1000000000000000000", want: []string{"Unix seconds: 1000000000", "Unix nanoseconds: 1000000000000000000"}},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			out := runTool(t, "time.from", tt.input, nil)
+			for _, want := range tt.want {
+				if !strings.Contains(out.Text, want) {
+					t.Fatalf("time.from output = %q, want %q", out.Text, want)
+				}
+			}
+		})
+	}
+}
+
 func TestGeneratorTools(t *testing.T) {
 	out := runTool(t, "uuid.v4", "", nil)
 	if len(out.Text) != 36 || strings.Count(out.Text, "-") != 4 {
@@ -204,6 +308,30 @@ func TestGeneratorTools(t *testing.T) {
 	}
 }
 
+func TestGeneratorInvalidOptionsReturnErrors(t *testing.T) {
+	cases := []struct {
+		id      string
+		options tool.Options
+	}{
+		{id: "password", options: tool.Options{"length": "abc"}},
+		{id: "password", options: tool.Options{"length": "0"}},
+		{id: "token", options: tool.Options{"bytes": "abc"}},
+		{id: "token", options: tool.Options{"bytes": "-1"}},
+	}
+	registry := tools.NewRegistry()
+	for _, tt := range cases {
+		t.Run(tt.id+" invalid option", func(t *testing.T) {
+			current, ok := registry.Get(tt.id)
+			if !ok {
+				t.Fatalf("tool %q not registered", tt.id)
+			}
+			if _, err := current.Run(context.Background(), tool.Input{}, tt.options); err == nil {
+				t.Fatalf("%s returned nil error for options %#v", tt.id, tt.options)
+			}
+		})
+	}
+}
+
 func TestTextTools(t *testing.T) {
 	cases := []struct {
 		id      string
@@ -216,10 +344,21 @@ func TestTextTools(t *testing.T) {
 		{id: "text.trim", input: "  hello\n", want: "hello"},
 		{id: "text.snake", input: "Hello world", want: "hello_world"},
 		{id: "text.kebab", input: "Hello world", want: "hello-world"},
+		{id: "text.snake", input: "helloWorld", want: "hello_world"},
+		{id: "text.kebab", input: "helloWorldTest", want: "hello-world-test"},
+		{id: "text.snake", input: "HTTPServer", want: "http_server"},
 		{id: "text.camel", input: "hello world", want: "helloWorld"},
 		{id: "text.pascal", input: "hello world", want: "HelloWorld"},
+		{id: "text.snake", input: "用户 Name Café", want: "用户_name_café"},
+		{id: "text.snake", input: "用户NameCafé", want: "用户_name_café"},
+		{id: "text.kebab", input: "用户 Name Café", want: "用户-name-café"},
+		{id: "text.camel", input: "用户 name café", want: "用户NameCafé"},
 		{id: "text.sort", input: "b\na", want: "a\nb"},
+		{id: "text.sort", input: "b\na\n", want: "a\nb"},
+		{id: "text.sort", input: "b\r\na\r\n", want: "a\nb"},
+		{id: "text.sort", input: "b\n\na\n", want: "\na\nb"},
 		{id: "text.uniq", input: "a\nb\na", want: "a\nb"},
+		{id: "text.uniq", input: "a\nb\na\n", want: "a\nb"},
 		{id: "regex.test", input: "abc 123", options: tool.Options{"pattern": `\d+`}, want: "123"},
 		{id: "regex.replace", input: "abc 123", options: tool.Options{"pattern": `\d+`, "replacement": "NUM"}, want: "abc NUM"},
 	}
@@ -250,6 +389,37 @@ func TestNetworkTools(t *testing.T) {
 		"fragment": "frag",
 	})
 
+	out = runTool(t, "url.parse", "example.com/path?q=1", nil)
+	assertJSONContains(t, out.Text, map[string]string{
+		"host":     "example.com",
+		"path":     "/path",
+		"rawQuery": "q=1",
+	})
+
+	out = runTool(t, "url.parse", "example.com:8080/path", nil)
+	assertJSONContains(t, out.Text, map[string]string{
+		"host": "example.com:8080",
+		"path": "/path",
+	})
+
+	out = runTool(t, "url.parse", "localhost:8080/path", nil)
+	assertJSONContains(t, out.Text, map[string]string{
+		"host": "localhost:8080",
+		"path": "/path",
+	})
+
+	out = runTool(t, "url.parse", "[::1]:8080/path", nil)
+	assertJSONContains(t, out.Text, map[string]string{
+		"host": "[::1]:8080",
+		"path": "/path",
+	})
+
+	out = runTool(t, "url.parse", "mailto:user@example.com", nil)
+	assertJSONContains(t, out.Text, map[string]string{
+		"scheme": "mailto",
+		"opaque": "user@example.com",
+	})
+
 	out = runTool(t, "query.parse", "?a=1&b=2", nil)
 	if !strings.Contains(out.Text, `"a":`) || !strings.Contains(out.Text, `"1"`) {
 		t.Fatalf("query.parse output = %q, want parsed query JSON", out.Text)
@@ -260,6 +430,35 @@ func TestNetworkTools(t *testing.T) {
 		if !strings.Contains(out.Text, want) {
 			t.Fatalf("cidr.parse output = %q, want %q", out.Text, want)
 		}
+	}
+}
+
+func TestNetworkEmptyInputsReturnActionableErrors(t *testing.T) {
+	cases := []struct {
+		id    string
+		input string
+		want  string
+	}{
+		{id: "url.parse", input: "", want: "URL is required"},
+		{id: "url.parse", input: "just-a-path", want: "URL must include a scheme or host"},
+		{id: "url.parse", input: "http:///path", want: `URL scheme "http" requires a host`},
+		{id: "url.parse", input: "https:?q=1", want: `URL scheme "https" requires a host`},
+		{id: "query.parse", input: "?", want: "query string is required"},
+		{id: "dns.lookup", input: "", want: "host is required"},
+		{id: "cidr.parse", input: "", want: "CIDR is required"},
+	}
+	registry := tools.NewRegistry()
+	for _, tt := range cases {
+		t.Run(tt.id+" empty input", func(t *testing.T) {
+			current, ok := registry.Get(tt.id)
+			if !ok {
+				t.Fatalf("tool %q not registered", tt.id)
+			}
+			_, err := current.Run(context.Background(), tool.Input{Text: tt.input}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("%s error = %v, want %q", tt.id, err, tt.want)
+			}
+		})
 	}
 }
 
@@ -279,17 +478,196 @@ func TestConvertTools(t *testing.T) {
 		t.Fatalf("csv.to_json output = %q, want JSON array", out.Text)
 	}
 
-	out = runTool(t, "headers.to_json", "Content-Type: application/json\nX-Test: yes", nil)
+	out = runTool(t, "headers.to_json", "Content-Type: application/json\nX-Test: yes\nSet-Cookie: a\nSet-Cookie: b", nil)
 	if !strings.Contains(out.Text, `"Content-Type": "application/json"`) || !strings.Contains(out.Text, `"X-Test": "yes"`) {
 		t.Fatalf("headers.to_json output = %q, want header JSON", out.Text)
+	}
+	if !strings.Contains(out.Text, `"Set-Cookie": [`) || !strings.Contains(out.Text, `"a"`) || !strings.Contains(out.Text, `"b"`) {
+		t.Fatalf("headers.to_json output = %q, want duplicate headers preserved as array", out.Text)
+	}
+
+	out = runTool(t, "headers.to_json", "content-type: application/json\nContent-Type: text/plain\nX-Test: a\nx-test: b", nil)
+	if !strings.Contains(out.Text, `"Content-Type": [`) || strings.Contains(out.Text, `"content-type"`) {
+		t.Fatalf("headers.to_json output = %q, want canonical content-type array", out.Text)
+	}
+	if !strings.Contains(out.Text, `"X-Test": [`) || strings.Contains(out.Text, `"x-test"`) {
+		t.Fatalf("headers.to_json output = %q, want canonical x-test array", out.Text)
+	}
+	var headers map[string][]string
+	if err := json.Unmarshal([]byte(out.Text), &headers); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(headers["Content-Type"], ",") != "application/json,text/plain" || strings.Join(headers["X-Test"], ",") != "a,b" {
+		t.Fatalf("merged header values lost order: %v", headers)
+	}
+}
+
+func TestYAMLToJSONNormalizesScalarKeys(t *testing.T) {
+	out := runTool(t, "yaml.to_json", "1: one\ntrue: ok\nnested:\n  2: two\nitems:\n  - 3: three\n", nil)
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out.Text), &got); err != nil {
+		t.Fatalf("yaml.to_json output = %q, want valid JSON: %v", out.Text, err)
+	}
+	if got["1"] != "one" || got["true"] != "ok" {
+		t.Fatalf("yaml.to_json output = %q, want scalar map keys normalized as JSON keys", out.Text)
+	}
+	nested, ok := got["nested"].(map[string]any)
+	if !ok || nested["2"] != "two" {
+		t.Fatalf("yaml.to_json output = %q, want nested scalar map keys normalized", out.Text)
+	}
+	items, ok := got["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("yaml.to_json output = %q, want list item preserved", out.Text)
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok || item["3"] != "three" {
+		t.Fatalf("yaml.to_json output = %q, want scalar keys normalized inside lists", out.Text)
+	}
+}
+
+func TestYAMLToJSONRejectsNormalizedDuplicateKeys(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("yaml.to_json")
+	if !ok {
+		t.Fatal("yaml.to_json not registered")
+	}
+	_, err := current.Run(context.Background(), tool.Input{Text: "1: one\n\"1\": uno\n"}, nil)
+	if err == nil || !strings.Contains(err.Error(), `YAML map key "1" is duplicated after JSON normalization`) {
+		t.Fatalf("yaml.to_json error = %v, want normalized duplicate key error", err)
+	}
+}
+
+func TestYAMLToJSONRejectsAliasCycle(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("yaml.to_json")
+	if !ok {
+		t.Fatal("yaml.to_json not registered")
+	}
+	_, err := current.Run(context.Background(), tool.Input{Text: "a: &a [*a]\n"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "YAML alias cycle is not supported") {
+		t.Fatalf("yaml.to_json error = %v, want alias cycle error", err)
+	}
+}
+
+func TestYAMLToJSONRejectsMultipleDocuments(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("yaml.to_json")
+	if !ok {
+		t.Fatal("yaml.to_json not registered")
+	}
+	_, err := current.Run(context.Background(), tool.Input{Text: "a: 1\n---\nb: 2\n"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "YAML stream contains multiple documents") {
+		t.Fatalf("yaml.to_json error = %v, want multiple document error", err)
+	}
+}
+
+func TestCSVToJSONRejectsUnsafeHeaders(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{input: "a,a\n1,2\n", want: `CSV header "a" is duplicated`},
+		{input: "a,\n1,2\n", want: "CSV header 2 is empty"},
+	}
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("csv.to_json")
+	if !ok {
+		t.Fatal("csv.to_json not registered")
+	}
+	for _, tt := range cases {
+		t.Run(tt.want, func(t *testing.T) {
+			_, err := current.Run(context.Background(), tool.Input{Text: tt.input}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("csv.to_json error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCSVToJSONTrimsHeaderNames(t *testing.T) {
+	out := runTool(t, "csv.to_json", " name , age \nsharp,1\n", nil)
+	var got []map[string]string
+	if err := json.Unmarshal([]byte(out.Text), &got); err != nil {
+		t.Fatalf("csv.to_json output = %q, want valid JSON: %v", out.Text, err)
+	}
+	if len(got) != 1 || got[0]["name"] != "sharp" || got[0]["age"] != "1" {
+		t.Fatalf("csv.to_json output = %q, want trimmed header names", out.Text)
+	}
+	if _, ok := got[0][" name "]; ok {
+		t.Fatalf("csv.to_json output = %q, should not keep untrimmed header name", out.Text)
 	}
 }
 
 func TestJWTDecode(t *testing.T) {
 	token := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoic2hhcnAiLCJpYXQiOjE3MDAwMDAwMDB9.signature"
 	out := runTool(t, "jwt.decode", token, nil)
-	if !strings.Contains(out.Text, `"alg": "HS256"`) || !strings.Contains(out.Text, `"name": "sharp"`) {
+	var got struct {
+		Header            map[string]any `json:"header"`
+		Payload           map[string]any `json:"payload"`
+		SignatureVerified *bool          `json:"signatureVerified"`
+	}
+	if err := json.Unmarshal([]byte(out.Text), &got); err != nil {
+		t.Fatalf("jwt.decode output = %q, want valid JSON: %v", out.Text, err)
+	}
+	if got.Header["alg"] != "HS256" || got.Header["typ"] != "JWT" || got.Payload["name"] != "sharp" || got.Payload["iat"] != float64(1700000000) || got.SignatureVerified == nil || *got.SignatureVerified {
 		t.Fatalf("jwt.decode output = %q, want decoded header and payload", out.Text)
+	}
+	if out.MimeType != "application/json" {
+		t.Fatalf("jwt.decode mime = %q, want application/json", out.MimeType)
+	}
+}
+
+func TestJWTDecodeRejectsMalformedTokenShape(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("jwt.decode")
+	if !ok {
+		t.Fatal("jwt.decode not registered")
+	}
+	for _, input := range []string{"header.payload", "header.payload.signature.extra", ".payload.signature"} {
+		t.Run(input, func(t *testing.T) {
+			if _, err := current.Run(context.Background(), tool.Input{Text: input}, nil); err == nil {
+				t.Fatalf("jwt.decode returned nil error for malformed token %q", input)
+			}
+		})
+	}
+}
+
+func TestJWTDecodeRejectsNonJSONParts(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("jwt.decode")
+	if !ok {
+		t.Fatal("jwt.decode not registered")
+	}
+	if _, err := current.Run(context.Background(), tool.Input{Text: "bm90anNvbg.bm90anNvbg.sig"}, nil); err == nil {
+		t.Fatal("jwt.decode returned nil error for non-JSON header and payload")
+	}
+}
+
+func TestJWTDecodeRejectsNonObjectParts(t *testing.T) {
+	registry := tools.NewRegistry()
+	current, ok := registry.Get("jwt.decode")
+	if !ok {
+		t.Fatal("jwt.decode not registered")
+	}
+	encode := base64.RawURLEncoding.EncodeToString
+	cases := []struct {
+		name  string
+		token string
+		want  string
+	}{
+		{name: "header string", token: encode([]byte(`"str"`)) + "." + encode([]byte(`{"a":1}`)) + ".sig", want: "invalid header: part must be a JSON object"},
+		{name: "payload array", token: encode([]byte(`{"alg":"none"}`)) + "." + encode([]byte(`[]`)) + ".sig", want: "invalid payload: part must be a JSON object"},
+		{name: "duplicate header key", token: encode([]byte(`{"a":1,"a":2}`)) + "." + encode([]byte(`{"a":1}`)) + ".sig", want: `invalid header: duplicate JSON object key "a"`},
+		{name: "duplicate payload key", token: encode([]byte(`{"alg":"none"}`)) + "." + encode([]byte(`{"a":1,"a":2}`)) + ".sig", want: `invalid payload: duplicate JSON object key "a"`},
+		{name: "malformed object payload", token: encode([]byte(`{"alg":"none"}`)) + "." + encode([]byte(`{"broken"`)) + ".sig", want: "invalid payload:"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := current.Run(context.Background(), tool.Input{Text: tt.token}, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("jwt.decode error = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
 

@@ -51,6 +51,8 @@ type Option struct {
 	Default     string
 	Required    bool
 	Secret      bool
+	// Choices lists allowed values for selection in interactive clients.
+	Choices []string
 }
 
 // Options stores runtime option values keyed by option name.

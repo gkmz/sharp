@@ -1,4 +1,4 @@
-.PHONY: test run build fmt tidy
+.PHONY: test run build fmt fmt-check vet verify release-check snapshot tidy
 
 test:
 	go test ./...
@@ -15,3 +15,16 @@ fmt:
 tidy:
 	go mod tidy
 
+fmt-check:
+	@test -z "$$(gofmt -l cmd internal pkg)" || { gofmt -l cmd internal pkg; exit 1; }
+
+vet:
+	go vet ./...
+
+verify: fmt-check vet test build
+
+release-check:
+	goreleaser check
+
+snapshot:
+	goreleaser release --snapshot --clean

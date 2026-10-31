@@ -1,0 +1,51 @@
+version: 2
+
+project_name: sharp
+
+builds:
+  - id: sharp
+    main: ./cmd/sharp
+    binary: sharp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w
+        -X github.com/gkmz/sharp/internal/cli.Version={{.Version}}
+        -X github.com/gkmz/sharp/internal/cli.Commit={{.FullCommit}}
+        -X github.com/gkmz/sharp/internal/cli.BuildDate={{.Date}}
+
+archives:
+  - id: sharp
+    formats: [tar.gz]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      - LICENSE
+      - README.md
+      - docs/README.zh-CN.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: '0.1.0-dev-{{ .ShortCommit }}'
+
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: gkmz
+    name: sharp
+  draft: true
+  prerelease: auto
+  name_template: 'sharp {{ .Tag }}'

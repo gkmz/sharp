@@ -70,13 +70,13 @@ Examples:
 ```bash
 sharp json pretty file.json
 sharp json minify file.json
-sharp json get file.json data.user.name
+sharp json get --path data.user.name file.json
 echo '{"a":1}' | sharp json pretty
 sharp b64 encode "hello"
-sharp b64 decode --url "aGVsbG8"
+sharp b64url decode "aGVsbG8="
 sharp hash sha256 "hello"
-sharp time 1714723200
-sharp uuid
+sharp time from 1714723200
+sharp uuid v4
 sharp password --length 24
 ```
 
@@ -386,8 +386,8 @@ URL decode -> JSON pretty -> save
 
 Requirements:
 
-- `p` should open a tool selector and pass current output as next input.
-- The app should remember recent chains.
+- `p` should pass current output back into the current input for immediate chaining.
+- Future versions may add a tool selector and recent chains after the core workflow is stable.
 - CLI mode should support shell-native chaining through stdout/stdin.
 
 ## 11. History and Privacy
@@ -419,6 +419,11 @@ Possible settings:
 - History enabled/disabled
 - Custom keybindings
 - Favorite tools
+
+Configuration is future scope. The current product persists only the five most
+recent tool IDs in `sharp/recent-tools.json` under the OS user configuration
+directory. It does not persist user input, output, option values, secrets,
+operation content history, or custom settings.
 
 ## 13. Technical Architecture
 
@@ -498,4 +503,3 @@ The first usable version should include:
 - Unix timestamp conversion.
 - UUID v4 generation.
 - Random password/token generation.
-
