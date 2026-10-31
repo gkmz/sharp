@@ -2,7 +2,7 @@
 
 [中文](RELEASING.zh-CN.md)
 
-The release pipeline is prepared for v0.1.0. No release is implied by these instructions or the prepared release notes. Publishing is a maintainer action.
+This guide covers release preparation, tag validation and review of GitHub Release drafts. Published versions are listed on GitHub Releases; a changelog heading alone does not mean a version has been published.
 
 ## Version policy
 
