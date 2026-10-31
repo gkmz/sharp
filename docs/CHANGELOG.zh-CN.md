@@ -6,9 +6,11 @@
 
 ## Unreleased
 
+## [v0.1.0] - 2026-10-31
+
 ### 新增
 
-- 增加仅创建草稿的 GoReleaser 发布流程，覆盖 macOS/Linux 的 amd64/arm64 安装包和 SHA256；CI 增加双平台检查、race 测试、PR 安装包验证，以及版本元信息、首版说明和中英文发布/安装指南。尚未正式发布版本。
+- 增加仅创建草稿的 GoReleaser 发布流程，覆盖 macOS/Linux 的 amd64/arm64 安装包和 SHA256；CI 增加双平台检查、race 测试、PR 安装包验证，以及版本元信息、首版说明和中英文发布/安装指南。
 - URL Encode/Decode 增加 `mode=component`，用于数据库密码等 URI 值，解码保留字面量加号；默认仍为 `mode=query`。
 - Token 增加 `format=hex|base64|base64url`，明确长度按原始随机字节数计算；默认仍为 32 字节、无填充 Base64URL。
 - 增加 Ctrl+R 最近工具列表，保留最近使用的 5 个动作；历史仅持久化工具 ID，选择后定位到对应工作台而不执行，存储不可用时退回会话内历史。

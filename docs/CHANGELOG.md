@@ -6,9 +6,11 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 
 ## Unreleased
 
+## [v0.1.0] - 2026-10-31
+
 ### Added
 
-- Added a draft-only GoReleaser release pipeline for macOS/Linux amd64/arm64 archives and SHA256 checksums, Linux/macOS verification with race tests, PR package smoke checks, build metadata, first-release notes, and bilingual release/installation guides. No version has been published yet.
+- Added a draft-only GoReleaser release pipeline for macOS/Linux amd64/arm64 archives and SHA256 checksums, Linux/macOS verification with race tests, PR package smoke checks, build metadata, first-release notes, and bilingual release/installation guides.
 - URL Encode/Decode now supports `mode=component` for URI values such as database passwords, preserving literal plus on decode; `mode=query` remains the default.
 - Token generation now supports `format=hex|base64|base64url` with explicit raw-byte sizing; the existing 32-byte unpadded Base64URL default is unchanged.
 - Added a Ctrl+R recent-tools picker for the five most recently used actions, with persistent ID-only history, exact-action navigation without execution, and session fallback when storage is unavailable.

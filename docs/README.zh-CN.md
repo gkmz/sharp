@@ -34,7 +34,7 @@
 
 ## 安装
 
-已准备首个 `v0.1.0` 的打包流程，尚未正式发布。目前可从本地仓库安装，或用 `go install github.com/gkmz/sharp/cmd/sharp@main` 体验 main 分支，需要 Go 1.25.1+。
+从本地仓库安装，或用 `go install github.com/gkmz/sharp/cmd/sharp@main` 体验 main 分支，需要 Go 1.25.1+：
 
 ```bash
 git clone https://github.com/gkmz/sharp.git
@@ -52,7 +52,7 @@ sharp version
 
 将 export 写入 shell 启动文件，zsh 使用 `~/.zshrc`。自定义 GOBIN 时应添加相应目录。如果仍执行 `/usr/local/bin/sharp`，用 `type -a sharp` 检查优先级，并刷新命令缓存（zsh 用 `rehash`）。更新本地代码后重新运行 `go install ./cmd/sharp` 即可。
 
-首个版本正式发布后，可在 [GitHub Releases](https://github.com/gkmz/sharp/releases) 下载 macOS/Linux 的 amd64、arm64 安装包，包含 LICENSE、中英文 README 和 `checksums.txt`。届时 Go 用户可以用 `go install github.com/gkmz/sharp/cmd/sharp@v0.1.0` 安装固定版本，或用 `@latest` 安装最新稳定模块版本。Homebrew 分发后续单独补充。
+已发布版本见 [GitHub Releases](https://github.com/gkmz/sharp/releases)。安装包面向 macOS/Linux 的 amd64、arm64，包含 LICENSE、中英文 README 和 `checksums.txt`。版本标签可用后，Go 用户可以用 `go install github.com/gkmz/sharp/cmd/sharp@v0.1.0` 安装固定版本，或用 `@latest` 安装最新稳定模块版本。Homebrew 分发后续单独补充。
 
 Apple Silicon 选择 `darwin_arm64`，Intel Mac 选择 `darwin_amd64`，Linux 按系统和架构选择（`uname -s; uname -m`）。将压缩包与同一 Release 的 `checksums.txt` 下载到空目录，再校验所选文件。以下是首次 Apple Silicon 发布后的安装示例：
 

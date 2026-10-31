@@ -34,7 +34,7 @@ The project is designed for everyday developer workflows: paste data, transform 
 
 ## Installation
 
-Release packaging is prepared for the first `v0.1.0`; it has not been published yet. Until then, install from a local checkout or try the current main branch with `go install github.com/gkmz/sharp/cmd/sharp@main` (requires Go 1.25.1+).
+Install from a local checkout or try the current main branch with `go install github.com/gkmz/sharp/cmd/sharp@main` (requires Go 1.25.1+):
 
 ```bash
 git clone https://github.com/gkmz/sharp.git
@@ -52,7 +52,7 @@ sharp version
 
 Add the export to your shell startup file (for zsh, `~/.zshrc`). A custom GOBIN needs its own PATH entry. If an older `/usr/local/bin/sharp` still runs, inspect `type -a sharp` and refresh the shell's command cache (`rehash` in zsh). To update from this checkout, rerun `go install ./cmd/sharp`.
 
-After the first release is published, [GitHub Releases](https://github.com/gkmz/sharp/releases) will provide macOS/Linux archives for amd64 and arm64, with LICENSE, both READMEs and `checksums.txt`. Go users can then install `go install github.com/gkmz/sharp/cmd/sharp@v0.1.0` (fixed version) or `@latest` (latest stable module version). Homebrew distribution is planned separately.
+Published versions are listed on [GitHub Releases](https://github.com/gkmz/sharp/releases). Release archives target macOS/Linux on amd64 and arm64, with LICENSE, both READMEs and `checksums.txt`. Once a version tag is available, Go users can install `go install github.com/gkmz/sharp/cmd/sharp@v0.1.0` (fixed version) or `@latest` (latest stable module version). Homebrew distribution is planned separately.
 
 For a release archive, select `darwin_arm64` for Apple Silicon, `darwin_amd64` for Intel Macs, or the corresponding Linux architecture (`uname -s; uname -m`). Download the archive and `checksums.txt` from the same Release into an empty directory, then verify the selected file (the following name is an example for the first Apple Silicon release):
 
