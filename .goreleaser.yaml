@@ -40,7 +40,8 @@ snapshot:
   version_template: '0.1.0-dev-{{ .ShortCommit }}'
 
 changelog:
-  disable: true
+  # This pipeline also loads the file supplied by --release-notes.
+  disable: false
 
 release:
   github:

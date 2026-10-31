@@ -63,3 +63,9 @@ jobs:
           args: release --clean --release-notes docs/releases/${{ github.ref_name }}.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify uploaded release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$(gh release view "$RELEASE_TAG" --json body --jq .body)" = "$(cat "docs/releases/$RELEASE_TAG.md")"
