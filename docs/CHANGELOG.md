@@ -6,6 +6,15 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 
 ## Unreleased
 
+### Added
+
+- Added a Normal-mode theme picker with live preview, cancel/apply behavior, persistent selection, `--theme` and `SHARP_THEME` startup overrides, and partial custom themes in `config.yaml`.
+- Added five light/dark semantic themes: `sharp-color`, `sharp`, `lazygit`, `catppuccin`, and `high-contrast`.
+
+### Changed
+
+- `sharp-color` is now the default TUI palette; the previous restrained appearance remains available as `sharp`. Theme selection does not change CLI transformation output.
+
 ## [v0.1.0] - 2026-10-31
 
 ### Added

@@ -6,6 +6,15 @@
 
 ## Unreleased
 
+### 新增
+
+- 增加 Normal 模式主题选择器，支持实时预览、取消/应用、持久化选择、`--theme` 与 `SHARP_THEME` 启动覆盖，以及在 `config.yaml` 中定义部分颜色覆盖的自定义主题。
+- 增加五套同时适配深色和浅色终端的语义主题：`sharp-color`、`sharp`、`lazygit`、`catppuccin`、`high-contrast`。
+
+### 变更
+
+- `sharp-color` 成为默认 TUI 配色；原有克制外观继续以 `sharp` 提供。主题选择不会改变 CLI 转换输出。
+
 ## [v0.1.0] - 2026-10-31
 
 ### 新增

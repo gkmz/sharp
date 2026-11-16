@@ -112,6 +112,39 @@ The footer identifies the active mode with a text and color badge: `NORMAL` for 
 
 Green borders identify the focused region; blue marks the active selection and a quieter style preserves selections in other regions. Input, Options/Path, and Output use open sections inside Workspace. Empty sections show contextual guidance without adding text to the document or result. Colors adapt to light and dark terminal backgrounds; font family and size follow your terminal settings.
 
+### Themes
+
+Press `t` in Normal mode to open the theme picker from any region. Use `j/k` or Up/Down for live preview, Enter to apply and save, and Esc to restore the theme that was active when the picker opened. Sharp includes `sharp-color` (default), `sharp`, `lazygit`, `catppuccin`, and `high-contrast`; `sharp` retains the original restrained palette.
+
+Select a startup theme without changing the saved choice:
+
+```bash
+sharp --theme lazygit
+SHARP_THEME=catppuccin sharp
+```
+
+Startup precedence is `--theme` → `SHARP_THEME` → `theme` in the configuration file → `sharp-color`. The configuration file is `~/Library/Application Support/sharp/config.yaml` on macOS and `${XDG_CONFIG_HOME:-~/.config}/sharp/config.yaml` on Linux. Custom themes extend one built-in and override any subset of semantic colors for light and dark terminals:
+
+```yaml
+theme: my-theme
+
+themes:
+  my-theme:
+    extends: sharp-color
+    dark:
+      category: "#73c7ec"
+      group: "#c5a3ff"
+      focus: "#a6e36f"
+      selection_background: "#31456d"
+    light:
+      category: "#236c85"
+      group: "#7352a3"
+      focus: "#416e28"
+      selection_background: "#d4e1f5"
+```
+
+Theme colors affect the interactive TUI only. CLI transformations and redirected output remain plain text without ANSI styling.
+
 JSON follows the same rules with Pretty, Minify, Sort, Query, Escape, Unescape, and Check. Path appears only for Query; Enter in Path queries the shared input. Check reports validation in the status line. Across all groups, `p`/`a` applies a successful result to Input and clears Output; errors cannot be applied. While input or options are incomplete, the previous result stays visible as `stale`; copy, save, and Apply are blocked until a fresh result is available.
 
 Input and Output do not need to be selected. Press `i` to edit Input directly, or `o` for Options/Path. Enter inserts a newline in Input; in Options/Path it executes and returns to Normal. Options use a form with fixed parameter labels and one editable value per row. Tab/Shift+Tab moves between option fields; Left/Right selects enumerated values such as URL mode or token format. Text values accept spaces, quotes, backslashes, and `=` literally, with no extra quoting. Secret fields, such as HMAC keys, are masked individually. Tab stays in the form; use Esc before switching regions. In Input, Tab does not navigate. In Normal mode, arrows in Workspace scroll Output. `?` lists available commands and option descriptions. Operation feedback appears above the shortcut hints.
@@ -125,6 +158,7 @@ Common shortcuts outside edit mode:
 | `1`, `2`, `3` | Focus Categories, Actions, or Workspace. |
 | `s` in Categories / `/` in Normal mode | Start inline tool search. |
 | `Ctrl+R` | Open the five most recently used actions in Normal mode; Enter opens without running, Esc closes. |
+| `t` | Open the theme picker in Normal mode; preview with j/k or arrows, Enter saves, Esc cancels. |
 | `j/k` in Categories / Up / Down | Select the next/previous category; arrows select search results or scroll Output in Workspace. |
 | Left / Right or `h` / `l` | Select an action in region 2. |
 | Enter | Open the category selection; run the selected tool/action in regions 2 and 3. |

@@ -112,6 +112,39 @@ Normal 模式处理命令与导航，只有 `i` 或 `o` 才进入编辑。Tab/Sh
 
 绿色边框标识当前焦点区域，蓝色标识当前选中项，其他区域以较弱样式保留选择。Workspace 内的 Input、Options/Path 和 Output 使用开放分区，空白时显示对应操作引导；引导文字不会进入输入文档或结果。配色适配深色与浅色终端背景，字体和字号沿用终端设置。
 
+### 主题
+
+在 Normal 模式下可从任意区域按 `t` 打开主题选择器。使用 `j/k` 或上下方向键实时预览，Enter 应用并保存，Esc 恢复打开选择器前的主题。Sharp 内置 `sharp-color`（默认）、`sharp`、`lazygit`、`catppuccin` 和 `high-contrast`；`sharp` 保留原来的克制配色。
+
+只覆盖本次启动主题而不修改已保存选择：
+
+```bash
+sharp --theme lazygit
+SHARP_THEME=catppuccin sharp
+```
+
+启动优先级为 `--theme` → `SHARP_THEME` → 配置文件中的 `theme` → `sharp-color`。macOS 配置文件位于 `~/Library/Application Support/sharp/config.yaml`，Linux 位于 `${XDG_CONFIG_HOME:-~/.config}/sharp/config.yaml`。自定义主题继承一个内置主题，并可分别覆盖深色、浅色终端中的部分语义颜色：
+
+```yaml
+theme: my-theme
+
+themes:
+  my-theme:
+    extends: sharp-color
+    dark:
+      category: "#73c7ec"
+      group: "#c5a3ff"
+      focus: "#a6e36f"
+      selection_background: "#31456d"
+    light:
+      category: "#236c85"
+      group: "#7352a3"
+      focus: "#416e28"
+      selection_background: "#d4e1f5"
+```
+
+主题颜色只影响交互式 TUI；CLI 转换和重定向输出仍是不含 ANSI 样式的纯文本。
+
 JSON 使用相同规则，提供 Pretty、Minify、Sort、Query、Escape、Unescape、Check。仅 Query 显示 Path，在路径中按 Enter 查询共用输入；Check 在状态行显示校验结果。所有工具组的 `p`/`a` 都将成功结果应用回 Input 并清空 Output，错误信息不能回填输入。输入或参数尚未完整时，旧结果保留并标记为 `stale`，更新完成前无法复制、保存或应用。
 
 Input 和 Output 无需单独选中。`i` 直接编辑 Input，`o` 编辑 Options/Path。在 Input 中 Enter 换行；在参数中 Enter 执行并返回 Normal。Options 使用逐项表单：每个参数独占一行，参数名固定，只能编辑右侧的值。Tab/Shift+Tab 在参数间切换；URL mode、Token format 等枚举值用左右方向键选择。文本值中的空格、引号、反斜线和 `=` 都可以原样输入，无需额外加引号。HMAC key 等敏感字段单独遮罩。Tab 只在表单内部切换，按 Esc 后才能切换区域；Input 编辑时 Tab 不导航。Normal 模式下 Workspace 的上下方向键直接滚动 Output。按 `?` 查看命令和参数说明。操作反馈显示在底部快捷键提示的上方。
@@ -125,6 +158,7 @@ Input 和 Output 无需单独选中。`i` 直接编辑 Input，`o` 编辑 Option
 | `1`, `2`, `3` | 聚焦 Categories、Actions、Workspace。 |
 | Categories 中 `s` / Normal 模式下 `/` | 开始工具搜索，筛选框临时显示在类目内。 |
 | `Ctrl+R` | 在 Normal 模式打开最近使用的 5 个动作；Enter 打开但不执行，Esc 关闭。 |
+| `t` | 在 Normal 模式打开主题选择器；用 j/k 或方向键预览，Enter 保存，Esc 取消。 |
 | Categories 中 `j/k` / 上下方向键 | 逐项选择类目；方向键也可选择搜索结果或在 Workspace 中滚动 Output。 |
 | 左 / 右方向键或 `h` / `l` | 在区域 2 选择动作。 |
 | Enter | 在类目中打开所选项；在区域 2、3 执行当前工具/动作。 |
