@@ -13,6 +13,7 @@ import (
 // optionForm keeps labels outside the editors. Values are passed directly to
 // tools, so spaces, quotes and equals signs never require shell-like escaping.
 type optionForm struct {
+	styles   StyleSet
 	specs    []tool.Option
 	inputs   []textinput.Model
 	selected int
@@ -26,12 +27,16 @@ type optionDraft struct {
 }
 
 func newOptionForm(specs []tool.Option, draft tool.Options) optionForm {
-	f := optionForm{specs: specs}
+	return newOptionFormWithStyles(specs, draft, defaultStyleSet())
+}
+
+func newOptionFormWithStyles(specs []tool.Option, draft tool.Options, styles StyleSet) optionForm {
+	f := optionForm{specs: specs, styles: styles}
 	for _, spec := range specs {
 		input := textinput.New()
 		input.Prompt = ""
-		input.TextStyle, input.PlaceholderStyle = textStyle, dimStyle
-		input.Cursor.Style = focusStyle
+		input.TextStyle, input.PlaceholderStyle = styles.Text, styles.Dim
+		input.Cursor.Style = styles.Focus
 		input.Placeholder = "optional"
 		if spec.Required {
 			input.Placeholder = "required"
@@ -51,6 +56,15 @@ func newOptionForm(specs []tool.Option, draft tool.Options) optionForm {
 	}
 	f.SetWidth(60)
 	return f
+}
+
+func (f *optionForm) ApplyStyles(styles StyleSet) {
+	f.styles = styles
+	for i := range f.inputs {
+		f.inputs[i].TextStyle = styles.Text
+		f.inputs[i].PlaceholderStyle = styles.Dim
+		f.inputs[i].Cursor.Style = styles.Focus
+	}
 }
 
 func (f *optionForm) SetWidth(width int) {
@@ -143,10 +157,10 @@ func (f *optionForm) View(editing bool, rows int) string {
 		active := editing && i == f.selected
 		label := spec.Name + strings.Repeat(" ", max(0, f.labelW-lipgloss.Width(spec.Name))) + " = "
 		marker := "  "
-		labelStyle := dimStyle
+		labelStyle := f.styles.Dim
 		if active {
 			marker = "> "
-			labelStyle = focusStyle
+			labelStyle = f.styles.Focus
 		}
 		value := f.inputs[i].Value()
 		if spec.Secret && value != "" {
@@ -156,9 +170,9 @@ func (f *optionForm) View(editing bool, rows int) string {
 		var rendered string
 		if len(spec.Choices) > 0 {
 			value = "‹ " + value + " ›"
-			rendered = textStyle.Render(truncateDisplay(value, valueWidth))
+			rendered = f.styles.Text.Render(truncateDisplay(value, valueWidth))
 			if active {
-				rendered = focusStyle.Render(truncateDisplay(value, valueWidth))
+				rendered = f.styles.Focus.Render(truncateDisplay(value, valueWidth))
 			}
 		} else if active {
 			rendered = f.inputs[i].View()
@@ -166,7 +180,7 @@ func (f *optionForm) View(editing bool, rows int) string {
 			if value == "" {
 				value = f.inputs[i].Placeholder
 			}
-			rendered = textStyle.Render(truncateDisplay(value, valueWidth))
+			rendered = f.styles.Text.Render(truncateDisplay(value, valueWidth))
 		}
 		lines = append(lines, labelStyle.Render(marker+label)+rendered)
 	}

@@ -78,43 +78,51 @@ func workspaceSizes(width, height int, hasInput bool, optionRows int) (pageWidth
 }
 
 func newWorkspaceInput() textarea.Model {
+	return newWorkspaceInputWithStyles(defaultStyleSet())
+}
+
+func newWorkspaceInputWithStyles(styles StyleSet) textarea.Model {
 	input := textarea.New()
 	input.Prompt = ""
 	input.ShowLineNumbers = false
 	input.SetHeight(8)
-	style := textarea.Style{
-		Base: textStyle, Text: textStyle, CursorLine: textStyle,
-		Placeholder: dimStyle, EndOfBuffer: dimStyle,
-	}
-	input.FocusedStyle, input.BlurredStyle = style, style
-	input.Cursor.Style = focusStyle
+	applyWorkspaceInputStyles(&input, styles)
 	input.Blur()
 	return input
 }
 
-func workspaceInputView(input textarea.Model, active bool, hint string) string {
+func applyWorkspaceInputStyles(input *textarea.Model, styles StyleSet) {
+	style := textarea.Style{
+		Base: styles.Text, Text: styles.Text, CursorLine: styles.Text,
+		Placeholder: styles.Dim, EndOfBuffer: styles.Dim,
+	}
+	input.FocusedStyle, input.BlurredStyle = style, style
+	input.Cursor.Style = styles.Focus
+}
+
+func workspaceInputView(input textarea.Model, active bool, hint string, styles StyleSet) string {
 	if !active {
 		input.Blur()
 	}
 	if input.Value() == "" && !input.Focused() {
-		return textStyle.Render(wrapDisplayText(hint, max(1, input.Width())))
+		return styles.Text.Render(wrapDisplayText(hint, max(1, input.Width())))
 	}
 	return input.View()
 }
 
 // Open sections use a heading and whitespace instead of a second set of boxes.
 // Keep the same two-row budget as the editor: one heading, one trailing gap.
-func workspaceSection(title string, editing bool, content string, width, height int) string {
+func workspaceSection(title string, editing bool, content string, width, height int, styles StyleSet) string {
 	if height <= 0 {
 		return ""
 	}
 	innerWidth := max(1, width-2)
 	label := " " + truncateDisplay(title, max(1, innerWidth-2)) + " "
-	style := sectionTitleStyle
+	style := styles.SectionTitle
 	if editing {
-		style = focusStyle
+		style = styles.Focus
 	}
-	heading := style.Render(label) + sectionRuleStyle.Render(strings.Repeat("─", max(0, width-lipgloss.Width(label))))
+	heading := style.Render(label) + styles.SectionRule.Render(strings.Repeat("─", max(0, width-lipgloss.Width(label))))
 	lines := []string{fitWidth(heading, width)}
 	for _, line := range fixedLines(content, innerWidth, max(0, height-2)) {
 		lines = append(lines, " "+line+" ")
@@ -149,62 +157,62 @@ func workspaceOutputHint(autoPreview, hasInput bool) string {
 	return "Waiting for input"
 }
 
-func workspaceOutputView(output viewport.Model, text, action, hint string) string {
+func workspaceOutputView(output viewport.Model, text, action, hint string, styles StyleSet) string {
 	if text == "" && action == "" {
-		return dimStyle.Render(wrapDisplayText(hint, max(1, output.Width)))
+		return styles.Dim.Render(wrapDisplayText(hint, max(1, output.Width)))
 	}
 	return output.View()
 }
 
-func workspaceRunStatus(t tool.Tool, preview bool) string {
+func workspaceRunStatus(t tool.Tool, preview bool, _ StyleSet) statusMessage {
 	verb := "Completed"
 	if preview {
 		verb = "Updated"
 	} else if t.Category() == tool.CategoryGenerator {
 		verb = "Generated"
 	}
-	return successStyle.Render(verb + " " + t.Name())
+	return successStatus(verb + " " + t.Name())
 }
 
-func workspaceFooter(autoPreview, hasInput, hasOptions, editing bool, field editField, optionsTitle string) string {
+func workspaceFooter(autoPreview, hasInput, hasOptions, editing bool, field editField, optionsTitle string, styles StyleSet) string {
 	if editing {
 		if field == editFieldOptions {
-			return modeStatusLine("INSERT", optionsTitle, "type text", statusHint("Enter", "run"), statusHint("Esc", "normal"))
+			return modeStatusLine(styles, "INSERT", optionsTitle, "type text", statusHintWithStyles(styles, "Enter", "run"), statusHintWithStyles(styles, "Esc", "normal"))
 		}
-		return modeStatusLine("INSERT", "Input", "type text", statusHint("Enter", "newline"), statusHint("Esc", "normal"))
+		return modeStatusLine(styles, "INSERT", "Input", "type text", statusHintWithStyles(styles, "Enter", "newline"), statusHintWithStyles(styles, "Esc", "normal"))
 	}
 	hints := []string{}
 	if !autoPreview {
-		hints = append(hints, statusHint("r/Enter", "run"))
+		hints = append(hints, statusHintWithStyles(styles, "r/Enter", "run"))
 	}
 	if hasInput {
-		hints = append(hints, statusHint("v", "paste"), statusHint("i", "edit"), statusHint("x", "clear"))
+		hints = append(hints, statusHintWithStyles(styles, "v", "paste"), statusHintWithStyles(styles, "i", "edit"), statusHintWithStyles(styles, "x", "clear"))
 	}
 	if hasOptions {
-		hints = append(hints, statusHint("o", "options"))
+		hints = append(hints, statusHintWithStyles(styles, "o", "options"))
 	}
-	hints = append(hints, statusHint("y", "copy"))
+	hints = append(hints, statusHintWithStyles(styles, "y", "copy"))
 	if hasInput {
-		hints = append(hints, statusHint("p", "apply"))
+		hints = append(hints, statusHintWithStyles(styles, "p", "apply"))
 	}
-	hints = append(hints, statusHint("?", "help"))
-	return modeStatusLine("NORMAL", "", hints...)
+	hints = append(hints, statusHintWithStyles(styles, "?", "help"))
+	return modeStatusLine(styles, "NORMAL", "", hints...)
 }
 
 // Mode is derived from the focused context, never stored separately from it.
-func modeStatusLine(mode, target string, hints ...string) string {
-	background := lipgloss.TerminalColor(retainedColor)
-	foreground := lipgloss.TerminalColor(accentColor)
+func modeStatusLine(styles StyleSet, mode, target string, hints ...string) string {
+	background := lipgloss.TerminalColor(styles.RetainedColor)
+	foreground := lipgloss.TerminalColor(styles.AccentColor)
 	switch mode {
 	case "INSERT":
-		foreground = warningColor
+		foreground = styles.WarningColor
 	case "SEARCH":
-		foreground = focusColor
+		foreground = styles.Focus.GetForeground()
 	case "HELP":
-		foreground = accentColor
+		foreground = styles.AccentColor
 	}
 	badge := lipgloss.NewStyle().Foreground(foreground).Background(background).Render(mode)
-	line := statusLine(target, hints...)
+	line := statusLineWithStyles(styles, target, hints...)
 	if line == "" {
 		return badge
 	}

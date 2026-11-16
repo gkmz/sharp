@@ -14,6 +14,7 @@ import (
 
 type genericToolPage struct {
 	workspacePreview
+	styles       StyleSet
 	height       int
 	optionDrafts map[string]optionDraft
 	lastAction   string
@@ -33,39 +34,58 @@ type genericToolPage struct {
 	outputBoxH   int
 	field        editField
 	editing      bool
-	status       string
+	status       statusMessage
 	hasOptions   bool
 	hasInput     bool
 }
 
 func newToolPage(t tool.Tool) toolPage {
+	return newToolPageWithStyles(t, defaultStyleSet())
+}
+
+func newToolPageWithStyles(t tool.Tool, styles StyleSet) toolPage {
 	if factory, ok := specialPageFactories[t.ID()]; ok {
-		return factory(t)
+		page := factory(t)
+		page.ApplyStyles(styles)
+		return page
 	}
-	return newGenericToolPage(t)
+	return newGenericToolPageWithStyles(t, styles)
 }
 
 var specialPageFactories = map[string]func(tool.Tool) toolPage{}
 
 func newGenericToolPage(t tool.Tool) *genericToolPage {
-	input := newWorkspaceInput()
+	return newGenericToolPageWithStyles(t, defaultStyleSet())
+}
+
+func newGenericToolPageWithStyles(t tool.Tool, styles StyleSet) *genericToolPage {
+	input := newWorkspaceInputWithStyles(styles)
 
 	output := viewport.New(80, 12)
 
 	p := &genericToolPage{
+		styles:       styles,
 		active:       true,
 		optionDrafts: map[string]optionDraft{},
 		tool:         t,
 		input:        input,
-		optionForm:   newOptionForm(t.Options(), nil),
+		optionForm:   newOptionFormWithStyles(t.Options(), nil, styles),
 		output:       output,
 		options:      tool.Options{},
-		status:       "i edit | o options | r/Enter run | y copy | s save | p apply",
+		status:       mutedStatus("i edit | o options | r/Enter run | y copy | s save | p apply"),
 		hasOptions:   len(t.Options()) > 0,
 		hasInput:     toolUsesInput(t),
 	}
 	p.FocusInput()
 	return p
+}
+
+// ApplyStyles refreshes cached and nested rendering without changing page data.
+func (p *genericToolPage) ApplyStyles(styles StyleSet) {
+	p.styles = styles
+	applyWorkspaceInputStyles(&p.input, styles)
+	p.optionForm.ApplyStyles(styles)
+	p.renderOutput()
 }
 
 // SetSize recalculates the generic page layout and child component sizes.
@@ -94,7 +114,7 @@ func (p *genericToolPage) SelectTool(t tool.Tool) {
 	p.hasInput = toolUsesInput(t)
 	p.hasOptions = len(t.Options()) > 0
 	draft := p.optionDrafts[t.ID()]
-	p.optionForm = newOptionForm(t.Options(), draft.values)
+	p.optionForm = newOptionFormWithStyles(t.Options(), draft.values, p.styles)
 	p.optionForm.selected = draft.selected
 	p.options = tool.Options{}
 	_ = p.parseOptions()
@@ -104,7 +124,7 @@ func (p *genericToolPage) SelectTool(t tool.Tool) {
 	if p.width > 0 {
 		p.SetSize(p.width, p.height)
 	}
-	p.status = dimStyle.Render("Selected " + t.Name() + "; r/Enter runs on Input")
+	p.status = mutedStatus("Selected " + t.Name() + "; r/Enter runs on Input")
 }
 
 func (p *genericToolPage) Preview() {
@@ -115,12 +135,12 @@ func (p *genericToolPage) Preview() {
 	}
 	if strings.TrimSpace(p.input.Value()) == "" {
 		p.ClearOutput()
-		p.status = dimStyle.Render("Input empty; v paste or i edit")
+		p.status = mutedStatus("Input empty; v paste or i edit")
 		return
 	}
 	if err := p.parseOptions(); err != nil {
 		p.stale = true
-		p.status = dimStyle.Render("Options invalid or required; press o to edit")
+		p.status = mutedStatus("Options invalid or required; press o to edit")
 		return
 	}
 	p.run(true)
@@ -131,25 +151,25 @@ func (p *genericToolPage) SetActive(active bool) { p.active = active }
 // Apply 的语义与 JSON 一致，错误和无输入动作都不能覆盖文档。
 func (p *genericToolPage) ApplyOutput() {
 	if !p.OutputReady() {
-		p.status = errorStyle.Render("Output is stale; update Input/Options or run again")
+		p.status = errorStatus("Output is stale; update Input/Options or run again")
 		return
 	}
 	if !p.hasInput {
-		p.status = dimStyle.Render("This action has no input")
+		p.status = mutedStatus("This action has no input")
 		return
 	}
 	if p.outputErr {
-		p.status = errorStyle.Render("Cannot apply an error; fix Input or Options and run again")
+		p.status = errorStatus("Cannot apply an error; fix Input or Options and run again")
 		return
 	}
 	text := p.OutputText()
 	if text == "" {
-		p.status = dimStyle.Render("nothing to apply")
+		p.status = mutedStatus("nothing to apply")
 		return
 	}
 	p.SetInput(text)
 	p.ClearOutput()
-	p.status = successStyle.Render("applied output to input")
+	p.status = successStatus("applied output to input")
 }
 
 // Update keeps command keys out of editors and debounces local previews.
@@ -220,16 +240,16 @@ func (p *genericToolPage) Update(msg tea.Msg) (toolPage, tea.Cmd) {
 func (p *genericToolPage) View() string {
 	blocks := make([]string, 0, 4)
 	if p.hasInput {
-		blocks = append(blocks, workspaceSection("Input", p.active && p.editing && p.field == editFieldInput, workspaceInputView(p.input, p.active, workspaceInputHint(p.tool)), p.width, p.inputBoxH))
+		blocks = append(blocks, workspaceSection("Input", p.active && p.editing && p.field == editFieldInput, workspaceInputView(p.input, p.active, workspaceInputHint(p.tool), p.styles), p.width, p.inputBoxH, p.styles))
 	}
 
 	if p.hasOptions {
 		editing := p.active && p.editing && p.field == editFieldOptions
-		blocks = append(blocks, workspaceSection("Options", editing, p.optionForm.View(editing, max(1, p.optionsBoxH-2)), p.width, p.optionsBoxH))
+		blocks = append(blocks, workspaceSection("Options", editing, p.optionForm.View(editing, max(1, p.optionsBoxH-2)), p.width, p.optionsBoxH, p.styles))
 	}
 
-	output := workspaceOutputView(p.output, p.outputText, p.lastAction, workspaceOutputHint(canPreview(p.tool), p.hasInput))
-	blocks = append(blocks, workspaceSection(p.workspacePreview.title(p.lastAction, p.tool.Name()), false, output, p.width, p.outputBoxH))
+	output := workspaceOutputView(p.output, p.outputText, p.lastAction, workspaceOutputHint(canPreview(p.tool), p.hasInput), p.styles)
+	blocks = append(blocks, workspaceSection(p.workspacePreview.title(p.lastAction, p.tool.Name()), false, output, p.width, p.outputBoxH, p.styles))
 	return lipgloss.JoinVertical(lipgloss.Left, blocks...)
 }
 
@@ -298,7 +318,7 @@ func (p *genericToolPage) run(preview bool) {
 		p.outputText = err.Error()
 		p.outputErr = true
 		p.renderOutput()
-		p.status = errorStyle.Render("invalid options: " + p.tool.ID())
+		p.status = errorStatus("invalid options: " + p.tool.ID())
 		return
 	}
 	input := ""
@@ -309,7 +329,7 @@ func (p *genericToolPage) run(preview bool) {
 	if err != nil {
 		if preview {
 			p.stale = true
-			p.status = dimStyle.Render("Input or options invalid; preview paused")
+			p.status = mutedStatus("Input or options invalid; preview paused")
 			return
 		}
 		p.settled()
@@ -317,7 +337,7 @@ func (p *genericToolPage) run(preview bool) {
 		p.outputText = err.Error()
 		p.outputErr = true
 		p.renderOutput()
-		p.status = errorStyle.Render("run failed: " + p.tool.ID())
+		p.status = errorStatus("run failed: " + p.tool.ID())
 		return
 	}
 	p.settled()
@@ -325,14 +345,14 @@ func (p *genericToolPage) run(preview bool) {
 	p.outputText = out.Text
 	p.outputErr = false
 	p.renderOutput()
-	p.status = workspaceRunStatus(p.tool, preview)
+	p.status = workspaceRunStatus(p.tool, preview, p.styles)
 	p.markToolUsed(p.tool.ID())
 }
 
 // SetInput replaces input text and records undo history.
 func (p *genericToolPage) SetInput(value string) {
 	if !p.hasInput {
-		p.status = dimStyle.Render("this tool has no input")
+		p.status = mutedStatus("this tool has no input")
 		return
 	}
 	p.pushInputUndo()
@@ -344,7 +364,7 @@ func (p *genericToolPage) SetInput(value string) {
 // ClearInput clears input text and records undo history.
 func (p *genericToolPage) ClearInput() {
 	if !p.hasInput {
-		p.status = dimStyle.Render("this tool has no input")
+		p.status = mutedStatus("this tool has no input")
 		return
 	}
 	p.pushInputUndo()
@@ -372,15 +392,17 @@ func (p *genericToolPage) renderOutput() {
 	// viewport 不会自动软换行；这里按当前显示宽度预处理，避免长行横向溢出导致内容不可见。
 	wrapped := wrapDisplayText(p.outputText, max(1, p.output.Width))
 	if p.outputErr {
-		wrapped = errorStyle.Render(wrapped)
+		wrapped = p.styles.Error.Render(wrapped)
 	}
 	p.output.SetContent(wrapped)
 }
 
 // Status returns the latest user-facing page status.
 func (p *genericToolPage) Status() string {
-	return p.status
+	return p.status.Render(p.styles)
 }
+
+func (p *genericToolPage) StatusMessage() statusMessage { return p.status }
 
 // HelpText returns a compact help summary for legacy callers.
 func (p *genericToolPage) HelpText() string {
@@ -417,15 +439,15 @@ func (p *genericToolPage) FooterHints() string {
 	if p.editing && p.field == editFieldOptions {
 		hints := []string{}
 		if p.optionForm.HasChoices() {
-			hints = append(hints, statusHint("←/→", "choose"))
+			hints = append(hints, statusHintWithStyles(p.styles, "←/→", "choose"))
 		}
 		if len(p.tool.Options()) > 1 {
-			hints = append(hints, statusHint("Tab/S-Tab", "field"))
+			hints = append(hints, statusHintWithStyles(p.styles, "Tab/S-Tab", "field"))
 		}
-		hints = append(hints, statusHint("Enter", "run"), statusHint("Esc", "normal"))
-		return modeStatusLine("INSERT", "Options", hints...)
+		hints = append(hints, statusHintWithStyles(p.styles, "Enter", "run"), statusHintWithStyles(p.styles, "Esc", "normal"))
+		return modeStatusLine(p.styles, "INSERT", "Options", hints...)
 	}
-	return workspaceFooter(canPreview(p.tool), p.hasInput, p.hasOptions, p.editing, p.field, "Options")
+	return workspaceFooter(canPreview(p.tool), p.hasInput, p.hasOptions, p.editing, p.field, "Options", p.styles)
 }
 
 // IsEditing reports whether key events should be routed to a text editor.
@@ -472,7 +494,7 @@ func (p *genericToolPage) pushInputUndoValue(value string) {
 
 func (p *genericToolPage) undoInput() {
 	if len(p.inputUndo) == 0 {
-		p.status = dimStyle.Render("nothing to undo")
+		p.status = mutedStatus("nothing to undo")
 		return
 	}
 	current := p.input.Value()
@@ -481,12 +503,12 @@ func (p *genericToolPage) undoInput() {
 	p.inputRedo = append(p.inputRedo, current)
 	p.input.SetValue(last)
 	p.changed()
-	p.status = successStyle.Render("undo input")
+	p.status = successStatus("undo input")
 }
 
 func (p *genericToolPage) redoInput() {
 	if len(p.inputRedo) == 0 {
-		p.status = dimStyle.Render("nothing to redo")
+		p.status = mutedStatus("nothing to redo")
 		return
 	}
 	current := p.input.Value()
@@ -495,7 +517,7 @@ func (p *genericToolPage) redoInput() {
 	p.pushInputUndoValue(current)
 	p.input.SetValue(next)
 	p.changed()
-	p.status = successStyle.Render("redo input")
+	p.status = successStatus("redo input")
 }
 
 // HandleKey handles page-specific normal-mode shortcuts.
@@ -503,7 +525,7 @@ func (p *genericToolPage) HandleKey(key string) bool {
 	switch key {
 	case "i":
 		if !p.hasInput {
-			p.status = dimStyle.Render("This action has no input; o edits options")
+			p.status = mutedStatus("This action has no input; o edits options")
 			return true
 		}
 		p.field = editFieldInput
@@ -512,7 +534,7 @@ func (p *genericToolPage) HandleKey(key string) bool {
 		p.input.Focus()
 	case "o":
 		if !p.hasOptions {
-			p.status = dimStyle.Render("This action has no options")
+			p.status = mutedStatus("This action has no options")
 			return true
 		}
 		p.FocusOptions()

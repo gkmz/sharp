@@ -52,6 +52,7 @@ type helpSection struct {
 }
 
 type toolPage interface {
+	ApplyStyles(StyleSet)
 	SetSize(width, height int)
 	Update(msg tea.Msg) (toolPage, tea.Cmd)
 	View() string
@@ -71,6 +72,7 @@ type toolPage interface {
 	previewVersion() uint64
 	OutputReady() bool
 	Status() string
+	StatusMessage() statusMessage
 	HelpText() string
 	HelpCommands() []helpCommand
 	FooterHints() string
@@ -83,6 +85,7 @@ type toolPage interface {
 type model struct {
 	registry      *tool.Registry
 	readClipboard func() (string, error)
+	styles        StyleSet
 
 	allCategories []categoryGroup
 	categories    []categoryGroup
@@ -104,9 +107,10 @@ type model struct {
 	recentItems    []string
 	recentSelected int
 
-	width  int
-	height int
-	status string
+	width      int
+	height     int
+	status     string
+	statusKind statusKind
 }
 
 // Run starts the interactive Bubble Tea application for registry.
@@ -119,6 +123,10 @@ func Run(registry *tool.Registry) error {
 }
 
 func newModel(registry *tool.Registry) model {
+	return newModelWithStyles(registry, defaultStyleSet())
+}
+
+func newModelWithStyles(registry *tool.Registry, styles StyleSet) model {
 	search := textinput.New()
 	search.Placeholder = "Search tools"
 	search.Prompt = ""
@@ -130,6 +138,7 @@ func newModel(registry *tool.Registry) model {
 	m := model{
 		registry:      registry,
 		readClipboard: clipboard.Read,
+		styles:        styles,
 		lastTabByCat:  make(map[string]string),
 		pages:         make(map[string]toolPage),
 		search:        search,
@@ -137,10 +146,41 @@ func newModel(registry *tool.Registry) model {
 		helpVP:        viewport.New(80, 20),
 		status:        "s search · j/k or ↑/↓ select · Enter open · Ctrl+C quit",
 	}
+	applyTextInputStyles(&m.search, styles)
+	applyTextInputStyles(&m.help, styles)
 	m.allCategories = buildCategories(registry.All())
 	m.categories = m.allCategories
 	m.syncSelection()
 	return m
+}
+
+func applyTextInputStyles(input *textinput.Model, styles StyleSet) {
+	input.TextStyle = styles.Text
+	input.PlaceholderStyle = styles.Dim
+	input.Cursor.Style = styles.Focus
+}
+
+func (m *model) setStatus(message statusMessage) {
+	m.status = message.text
+	m.statusKind = message.kind
+}
+
+func (m *model) setPageStatus(page toolPage) {
+	if page != nil {
+		m.setStatus(page.StatusMessage())
+	}
+}
+
+func (m *model) applyStyles(styles StyleSet) {
+	m.styles = styles
+	applyTextInputStyles(&m.search, styles)
+	applyTextInputStyles(&m.help, styles)
+	for _, page := range m.pages {
+		page.ApplyStyles(styles)
+	}
+	if m.showHelp {
+		m.refreshHelp()
+	}
 }
 
 func (m model) Init() tea.Cmd {
@@ -163,7 +203,7 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 定时消息始终交回原工作台，不受搜索、帮助或当前区域影响。
 		msg.page.Update(msg)
 		if p := m.currentPage(); p == msg.page && !m.showHelp && !m.showRecent && m.focus != focusSearch {
-			m.status = p.Status()
+			m.setPageStatus(p)
 		}
 		return m, nil
 	case tea.WindowSizeMsg:
@@ -210,7 +250,7 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if p := m.currentPage(); m.focus == focusWorkspace && p != nil && p.IsEditing() {
 			updated, cmd := p.Update(msg)
 			m.setCurrentPage(updated)
-			m.status = updated.Status()
+			m.setPageStatus(updated)
 			return m, cmd
 		}
 		if key == "ctrl+r" {
@@ -313,12 +353,12 @@ func (m model) updateWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "i":
 		m.focus = focusWorkspace
 		p.HandleKey("i")
-		m.status = p.Status()
+		m.setPageStatus(p)
 		return m, textarea.Blink
 	case "o":
 		m.focus = focusWorkspace
 		p.HandleKey("o")
-		m.status = p.Status()
+		m.setPageStatus(p)
 		return m, textarea.Blink
 	case "enter", "r":
 		p.Run()
@@ -330,7 +370,7 @@ func (m model) updateWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		p.Preview()
 	case "X":
 		p.ClearOutput()
-		m.status = successStyle.Render("cleared output")
+		m.setStatus(successStatus("cleared output"))
 		return m, nil
 	case "y":
 		m.copyOutput()
@@ -353,11 +393,11 @@ func (m model) updateWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !p.HandleKey(msg.String()) {
 			updated, cmd := p.Update(msg)
 			m.setCurrentPage(updated)
-			m.status = updated.Status()
+			m.setPageStatus(updated)
 			return m, cmd
 		}
 	}
-	m.status = p.Status()
+	m.setPageStatus(p)
 	return m, nil
 }
 
@@ -377,11 +417,11 @@ func (m model) View() string {
 
 	categories := m.categoryPanel(leftWidth, categoryHeight)
 	left := categories
-	tabs := panelBox(2, m.tabsTitle(), !m.showHelp && !m.showRecent && m.focus == focusTabs, m.tabsView(rightWidth-2, panelContentHeight(toolHeight)), rightWidth, toolHeight)
-	page := panelBox(3, m.workspaceTitle(), !m.showHelp && !m.showRecent && m.focus == focusWorkspace, m.pageView(rightWidth-2, panelContentHeight(workspaceHeight)), rightWidth, workspaceHeight)
+	tabs := panelBoxWithStyles(m.styles, 2, m.tabsTitle(), !m.showHelp && !m.showRecent && m.focus == focusTabs, m.tabsView(rightWidth-2, panelContentHeight(toolHeight)), rightWidth, toolHeight)
+	page := panelBoxWithStyles(m.styles, 3, m.workspaceTitle(), !m.showHelp && !m.showRecent && m.focus == focusWorkspace, m.pageView(rightWidth-2, panelContentHeight(workspaceHeight)), rightWidth, workspaceHeight)
 	right := lipgloss.JoinVertical(lipgloss.Left, tabs, page)
-	footer := fitWidth(footerStyle.Render(m.footerLine()), m.width)
-	notification := fitWidth(m.status, m.width)
+	footer := fitWidth(m.styles.Footer.Render(m.footerLine()), m.width)
+	notification := fitWidth((statusMessage{text: m.status, kind: m.statusKind}).Render(m.styles), m.width)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 	// Keep feedback and commands visible even when the workbench is clipped.
 	view := notification + "\n" + footer
@@ -391,7 +431,7 @@ func (m model) View() string {
 		view = footer
 	}
 	if m.showHelp {
-		view = overlayPanel(view, m.helpView(), m.width, m.height)
+		view = overlayPanelWithStyles(m.styles, view, m.helpView(), m.width, m.height)
 	}
 	if m.showRecent {
 		view = placeOverlay(view, m.recentView(), m.width, m.height)
@@ -433,7 +473,7 @@ func (m model) searchView(width, height int) string {
 	} else {
 		query = fmt.Sprintf("/ %s", query)
 	}
-	return dimStyle.Render(query)
+	return m.styles.Dim.Render(query)
 }
 
 // The panel legends and list share the exact window, including the search row.
@@ -459,7 +499,7 @@ func (m model) categoryPanel(width, height int) string {
 		bottom = "↓ more"
 	}
 	active := !m.showHelp && !m.showRecent && (m.focus == focusCategories || m.focus == focusSearch)
-	return panelBoxWithLegends(title, bottom, active, m.categoryView(width-2, panelContentHeight(height)), width, height)
+	return panelBoxWithLegendsStyles(m.styles, title, bottom, active, m.categoryView(width-2, panelContentHeight(height)), width, height)
 }
 
 func (m model) categoryView(width, height int) string {
@@ -472,21 +512,23 @@ func (m model) categoryView(width, height int) string {
 		c := m.categories[i]
 		line := m.categoryLine(c, width)
 		if i == m.selectedCat {
-			style := retainedRowStyle
+			style := m.styles.RetainedRow
 			if !m.showHelp && !m.showRecent && (m.focus == focusCategories || m.focus == focusSearch) {
-				style = selectedRowStyle
+				style = m.styles.SelectedRow
 			}
 			line = style.Render(fitWidth(line, width))
 		} else if c.Header {
-			line = appTitleStyle.Render(line)
+			line = m.styles.Category.Render(line)
+		} else if c.Subcategory != "" && m.categoryHasHeader(c.Category) {
+			line = m.styles.Group.Render(line)
 		} else {
-			line = textStyle.Render(line)
+			line = m.styles.Category.Render(line)
 		}
 		b.WriteString(line + "\n")
 	}
 
 	if len(m.categories) == 0 {
-		b.WriteString(dimStyle.Render("No categories") + "\n")
+		b.WriteString(m.styles.Dim.Render("No categories") + "\n")
 	}
 	return b.String()
 }
@@ -509,17 +551,21 @@ func (m model) categoryLine(c categoryGroup, width int) string {
 func (m model) tabsView(width, height int) string {
 	cat := m.currentCategory()
 	if cat == nil {
-		return dimStyle.Render("No category selected")
+		return m.styles.Dim.Render("No category selected")
 	}
 
 	labels := make([]string, 0, len(cat.Tabs))
 	for _, tab := range cat.Tabs {
 		labels = append(labels, actionLabel(tab.Tool))
 	}
-	return flowLabels(width, height, labels, m.selectedTab, !m.showHelp && !m.showRecent && m.focus == focusTabs)
+	return flowLabelsWithStyles(m.styles, width, height, labels, m.selectedTab, !m.showHelp && !m.showRecent && m.focus == focusTabs)
 }
 
 func flowLabels(width, height int, labels []string, selected int, active bool) string {
+	return flowLabelsWithStyles(defaultStyleSet(), width, height, labels, selected, active)
+}
+
+func flowLabelsWithStyles(styles StyleSet, width, height int, labels []string, selected int, active bool) string {
 	var b strings.Builder
 	lineWidth := 0
 	lines := 0
@@ -545,13 +591,13 @@ func flowLabels(width, height int, labels []string, selected int, active bool) s
 		}
 		cell := " " + label + " "
 		if i == selected {
-			style := retainedLabelStyle
+			style := styles.RetainedLabel
 			if active {
-				style = activeLabelStyle
+				style = styles.ActiveLabel
 			}
 			b.WriteString(style.Render(cell))
 		} else {
-			b.WriteString(textStyle.Render(cell))
+			b.WriteString(styles.Action.Render(cell))
 		}
 		lineWidth += cellWidth
 		if lines >= height && i < len(labels)-1 {
@@ -600,12 +646,12 @@ func labelRows(width int, labels []string) int {
 func (m model) pageView(width, height int) string {
 	p := m.currentPage()
 	if p == nil {
-		return dimStyle.Render("No tool selected")
+		return m.styles.Dim.Render("No tool selected")
 	}
 
 	var b strings.Builder
 	if tab := m.currentTab(); tab != nil {
-		b.WriteString(dimStyle.Render(truncateDisplay(tab.Tool.Description(), width)) + "\n")
+		b.WriteString(m.styles.Dim.Render(truncateDisplay(tab.Tool.Description(), width)) + "\n")
 	}
 	p.SetActive(!m.showHelp && !m.showRecent && m.focus == focusWorkspace)
 	b.WriteString(p.View())
@@ -631,39 +677,43 @@ func (m model) workspaceTitle() string {
 
 func (m model) footerLine() string {
 	if m.showRecent {
-		return modeStatusLine("RECENT", "", statusHint("↑/↓", "select"), statusHint("Enter", "open"), statusHint("Esc", "close"))
+		return modeStatusLine(m.styles, "RECENT", "", statusHintWithStyles(m.styles, "↑/↓", "select"), statusHintWithStyles(m.styles, "Enter", "open"), statusHintWithStyles(m.styles, "Esc", "close"))
 	}
 	if m.showHelp {
-		return modeStatusLine("HELP", "Commands", statusHint("type", "filter"), statusHint("ctrl+u/d", "scroll"), statusHint("Esc", "close"))
+		return modeStatusLine(m.styles, "HELP", "Commands", statusHintWithStyles(m.styles, "type", "filter"), statusHintWithStyles(m.styles, "ctrl+u/d", "scroll"), statusHintWithStyles(m.styles, "Esc", "close"))
 	}
 	switch m.focus {
 	case focusSearch:
-		return modeStatusLine("SEARCH", "Categories", statusHint("↑/↓", "select"), statusHint("Enter", "open"), statusHint("Esc", "clear"))
+		return modeStatusLine(m.styles, "SEARCH", "Categories", statusHintWithStyles(m.styles, "↑/↓", "select"), statusHintWithStyles(m.styles, "Enter", "open"), statusHintWithStyles(m.styles, "Esc", "clear"))
 	case focusCategories:
-		return modeStatusLine("NORMAL", "Categories", statusHint("s", "search"), statusHint("j/k/↑/↓", "select"), statusHint("Tab", "area"), statusHint("^R", "recent"), statusHint("?", "help"))
+		return modeStatusLine(m.styles, "NORMAL", "Categories", statusHintWithStyles(m.styles, "s", "search"), statusHintWithStyles(m.styles, "j/k/↑/↓", "select"), statusHintWithStyles(m.styles, "Tab", "area"), statusHintWithStyles(m.styles, "^R", "recent"), statusHintWithStyles(m.styles, "?", "help"))
 	case focusTabs:
-		return modeStatusLine("NORMAL", "Actions", statusHint("←/→", "select"), statusHint("Tab", "area"), statusHint("Enter", "run"), statusHint("^R", "recent"), statusHint("?", "help"))
+		return modeStatusLine(m.styles, "NORMAL", "Actions", statusHintWithStyles(m.styles, "←/→", "select"), statusHintWithStyles(m.styles, "Tab", "area"), statusHintWithStyles(m.styles, "Enter", "run"), statusHintWithStyles(m.styles, "^R", "recent"), statusHintWithStyles(m.styles, "?", "help"))
 	case focusWorkspace:
 		if p := m.currentPage(); p != nil {
 			if hints := p.FooterHints(); hints != "" {
 				if !p.IsEditing() {
-					recent := statusHint("^R", "recent")
+					recent := statusHintWithStyles(m.styles, "^R", "recent")
 					if lipgloss.Width(hints)+1+lipgloss.Width(recent) <= m.width {
 						hints += " " + recent
 					}
 				}
 				return hints
 			}
-			return modeStatusLine("NORMAL", "Workspace", statusHint("r/Enter", "run"), statusHint("i", "edit"), statusHint("v", "paste"), statusHint("y", "copy"), statusHint("?", "help"))
+			return modeStatusLine(m.styles, "NORMAL", "Workspace", statusHintWithStyles(m.styles, "r/Enter", "run"), statusHintWithStyles(m.styles, "i", "edit"), statusHintWithStyles(m.styles, "v", "paste"), statusHintWithStyles(m.styles, "y", "copy"), statusHintWithStyles(m.styles, "?", "help"))
 		}
 	}
 	return ""
 }
 
 func statusLine(scope string, hints ...string) string {
+	return statusLineWithStyles(defaultStyleSet(), scope, hints...)
+}
+
+func statusLineWithStyles(styles StyleSet, scope string, hints ...string) string {
 	parts := make([]string, 0, len(hints)+1)
 	if scope != "" {
-		parts = append(parts, appTitleStyle.Render(scope))
+		parts = append(parts, styles.AppTitle.Render(scope))
 	}
 	parts = append(parts, hints...)
 	// Keep contextual shortcuts on one line even on an 80-column terminal.
@@ -671,10 +721,14 @@ func statusLine(scope string, hints ...string) string {
 }
 
 func statusHint(key string, label string) string {
+	return statusHintWithStyles(defaultStyleSet(), key, label)
+}
+
+func statusHintWithStyles(styles StyleSet, key string, label string) string {
 	if label == "" {
-		return statusKeyStyle.Render("[" + key + "]")
+		return styles.StatusKey.Render("[" + key + "]")
 	}
-	return statusKeyStyle.Render("["+key+"]") + " " + statusTextStyle.Render(label)
+	return styles.StatusKey.Render("["+key+"]") + " " + styles.StatusText.Render(label)
 }
 
 func (m model) helpView() string {
@@ -687,10 +741,10 @@ func (m model) helpContent() string {
 	width := m.helpVP.Width
 
 	var b strings.Builder
-	b.WriteString(sectionLabel("Filter", true, true) + " ")
+	b.WriteString(sectionLabelWithStyles(m.styles, "Filter", true, true) + " ")
 	b.WriteString(m.help.View() + "\n")
-	b.WriteString(dimStyle.Render(wrapDisplayText("Esc close · Ctrl+u/d scroll · Ctrl+x clear", width)) + "\n")
-	b.WriteString(sectionRuleStyle.Render(strings.Repeat("─", width)) + "\n")
+	b.WriteString(m.styles.Dim.Render(wrapDisplayText("Esc close · Ctrl+u/d scroll · Ctrl+x clear", width)) + "\n")
+	b.WriteString(m.styles.SectionRule.Render(strings.Repeat("─", width)) + "\n")
 	matched := 0
 	for _, section := range sections {
 		filtered := filterHelpCommands(section.Commands, query)
@@ -700,14 +754,14 @@ func (m model) helpContent() string {
 		if matched > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString(panelTitleStyle.Render(section.Title) + "\n")
+		b.WriteString(m.styles.PanelTitle.Render(section.Title) + "\n")
 		for _, cmd := range filtered {
-			b.WriteString(renderHelpCommand(cmd, width))
+			b.WriteString(renderHelpCommandWithStyles(m.styles, cmd, width))
 		}
 		matched += len(filtered)
 	}
 	if matched == 0 {
-		b.WriteString(dimStyle.Render("No matching commands") + "\n")
+		b.WriteString(m.styles.Dim.Render("No matching commands") + "\n")
 	}
 	return b.String()
 }
@@ -782,14 +836,18 @@ func filterHelpCommands(commands []helpCommand, query string) []helpCommand {
 }
 
 func renderHelpCommand(cmd helpCommand, width int) string {
+	return renderHelpCommandWithStyles(defaultStyleSet(), cmd, width)
+}
+
+func renderHelpCommandWithStyles(styles StyleSet, cmd helpCommand, width int) string {
 	if width < 70 {
-		heading := statusKeyStyle.Render(cmd.Key) + "  " + textStyle.Render(cmd.Command)
+		heading := styles.StatusKey.Render(cmd.Key) + "  " + styles.Text.Render(cmd.Command)
 		description := wrapDisplayText(cmd.Description, max(1, width-2))
 		return heading + "\n  " + strings.ReplaceAll(description, "\n", "\n  ") + "\n"
 	}
 	keyWidth := 16
 	commandWidth := 18
-	key := statusKeyStyle.Render(fitWidth(" "+cmd.Key+" ", keyWidth))
+	key := styles.StatusKey.Render(fitWidth(" "+cmd.Key+" ", keyWidth))
 	command := fitWidth(cmd.Command, commandWidth)
 	prefixWidth := keyWidth + 1 + commandWidth + 1
 	descWidth := max(10, width-prefixWidth)
@@ -815,23 +873,35 @@ func (m *model) refreshHelp() {
 }
 
 func panelBox(num int, title string, active bool, content string, width, height int) string {
-	return panelBoxWithTitle(fmt.Sprintf("[%d]-%s", num, title), active, content, width, height)
+	return panelBoxWithStyles(defaultStyleSet(), num, title, active, content, width, height)
+}
+
+func panelBoxWithStyles(styles StyleSet, num int, title string, active bool, content string, width, height int) string {
+	return panelBoxWithTitleStyles(styles, fmt.Sprintf("[%d]-%s", num, title), active, content, width, height)
 }
 
 func panelBoxTitle(title string, active bool, content string, width, height int) string {
-	return panelBoxWithTitle(title, active, content, width, height)
+	return panelBoxWithTitleStyles(defaultStyleSet(), title, active, content, width, height)
 }
 
 func panelBoxWithTitle(titleText string, active bool, content string, width, height int) string {
-	return panelBoxWithLegends(titleText, "", active, content, width, height)
+	return panelBoxWithTitleStyles(defaultStyleSet(), titleText, active, content, width, height)
+}
+
+func panelBoxWithTitleStyles(styles StyleSet, titleText string, active bool, content string, width, height int) string {
+	return panelBoxWithLegendsStyles(styles, titleText, "", active, content, width, height)
 }
 
 func panelBoxWithLegends(titleText, bottomText string, active bool, content string, width, height int) string {
-	color := lipgloss.TerminalColor(borderColor)
-	titleStyle := panelTitleStyle
+	return panelBoxWithLegendsStyles(defaultStyleSet(), titleText, bottomText, active, content, width, height)
+}
+
+func panelBoxWithLegendsStyles(styles StyleSet, titleText, bottomText string, active bool, content string, width, height int) string {
+	color := lipgloss.TerminalColor(styles.BorderColor)
+	titleStyle := styles.PanelTitle
 	if active {
-		color = focusColor
-		titleStyle = focusStyle
+		color = styles.Focus.GetForeground()
+		titleStyle = styles.Focus
 	}
 	// 手写 legend 风格边框：标题嵌入上边框，内容永远被裁剪/补齐到固定宽高。
 	borderStyle := lipgloss.NewStyle().Foreground(color)
@@ -846,7 +916,7 @@ func panelBoxWithLegends(titleText, bottomText string, active bool, content stri
 	bottom := borderStyle.Render("└" + strings.Repeat("─", innerWidth) + "┘")
 	if bottomText != "" && innerWidth > 3 {
 		label := truncateDisplay(" "+bottomText+" ", innerWidth-1)
-		bottom = borderStyle.Render("└─") + dimStyle.Render(label) + borderStyle.Render(strings.Repeat("─", max(0, innerWidth-1-lipgloss.Width(label)))+"┘")
+		bottom = borderStyle.Render("└─") + styles.Dim.Render(label) + borderStyle.Render(strings.Repeat("─", max(0, innerWidth-1-lipgloss.Width(label)))+"┘")
 	}
 
 	contentLines := fixedLines(content, innerWidth, bodyHeight)
@@ -860,12 +930,16 @@ func panelBoxWithLegends(titleText, bottomText string, active bool, content stri
 }
 
 func overlayPanel(base string, overlay string, width, height int) string {
+	return overlayPanelWithStyles(defaultStyleSet(), base, overlay, width, height)
+}
+
+func overlayPanelWithStyles(styles StyleSet, base string, overlay string, width, height int) string {
 	if width <= 0 || height <= 0 {
 		return base
 	}
 	boxWidth := clamp(width*70/100, 46, max(46, width-4))
 	boxHeight := clamp(height*70/100, 10, max(10, height-2))
-	box := panelBox(0, "Help", true, overlay, boxWidth, boxHeight)
+	box := panelBoxWithStyles(styles, 0, "Help", true, overlay, boxWidth, boxHeight)
 	return placeOverlay(base, box, width, height)
 }
 
@@ -973,7 +1047,7 @@ func (m *model) moveCategory(delta int) {
 	m.selectedCat = next
 	m.restoreTabForSelectedCategory()
 	m.rebuildPage()
-	m.status = m.categoryStatus()
+	m.setStatus(mutedStatus(m.categoryStatus()))
 }
 
 func (m *model) nextSelectableCategory(from int, delta int) int {
@@ -1008,7 +1082,7 @@ func (m *model) moveTab(delta int) {
 		p.Preview()
 		// Navigation keeps the existing preview behavior, but is not tool use.
 		p.takeToolUse()
-		m.status = p.Status()
+		m.setPageStatus(p)
 	}
 }
 
@@ -1196,9 +1270,9 @@ func (m *model) newToolPage(t tool.Tool) toolPage {
 				tools[tab.Tool.ID()] = tab.Tool
 			}
 		}
-		return newJSONToolPage(t, tools)
+		return newJSONToolPageWithStyles(t, tools, m.styles)
 	}
-	return newToolPage(t)
+	return newToolPageWithStyles(t, m.styles)
 }
 
 func (m *model) rebuildPage() {
@@ -1211,7 +1285,7 @@ func (m *model) rebuildPage() {
 func (m *model) runSelected() {
 	if p := m.currentPage(); p != nil {
 		p.Run()
-		m.status = p.Status()
+		m.setPageStatus(p)
 	}
 }
 
@@ -1221,19 +1295,19 @@ func (m *model) copyOutput() {
 		return
 	}
 	if !p.OutputReady() {
-		m.status = errorStyle.Render("Output is stale; update Input/Options or run again")
+		m.setStatus(errorStatus("Output is stale; update Input/Options or run again"))
 		return
 	}
 	text := p.OutputText()
 	if text == "" {
-		m.status = dimStyle.Render("nothing to copy")
+		m.setStatus(mutedStatus("nothing to copy"))
 		return
 	}
 	if err := clipboard.Write(text); err != nil {
-		m.status = errorStyle.Render("copy failed: " + err.Error())
+		m.setStatus(errorStatus("copy failed: " + err.Error()))
 		return
 	}
-	m.status = successStyle.Render("Copied")
+	m.setStatus(successStatus("Copied"))
 }
 
 func (m *model) saveOutput() {
@@ -1242,19 +1316,19 @@ func (m *model) saveOutput() {
 		return
 	}
 	if !p.OutputReady() {
-		m.status = errorStyle.Render("Output is stale; update Input/Options or run again")
+		m.setStatus(errorStatus("Output is stale; update Input/Options or run again"))
 		return
 	}
 	text := p.OutputText()
 	if text == "" {
-		m.status = dimStyle.Render("nothing to save")
+		m.setStatus(mutedStatus("nothing to save"))
 		return
 	}
 	if err := os.WriteFile("sharp-output.txt", []byte(text), 0600); err != nil {
-		m.status = errorStyle.Render("save failed: " + err.Error())
+		m.setStatus(errorStatus("save failed: " + err.Error()))
 		return
 	}
-	m.status = successStyle.Render("saved to sharp-output.txt")
+	m.setStatus(successStatus("saved to sharp-output.txt"))
 }
 
 func (m *model) pasteInput() {
@@ -1264,13 +1338,13 @@ func (m *model) pasteInput() {
 	}
 	text, err := m.readClipboard()
 	if err != nil {
-		m.status = errorStyle.Render("paste failed: " + err.Error())
+		m.setStatus(errorStatus("paste failed: " + err.Error()))
 		return
 	}
 	p.SetInput(text)
 	p.Preview()
 	m.focus = focusWorkspace
-	m.status = p.Status()
+	m.setPageStatus(p)
 }
 
 func (m *model) categoryStatus() string {
@@ -1458,13 +1532,17 @@ func toolUsesInput(t tool.Tool) bool {
 }
 
 func sectionLabel(title string, active bool, editing bool) string {
+	return sectionLabelWithStyles(defaultStyleSet(), title, active, editing)
+}
+
+func sectionLabelWithStyles(styles StyleSet, title string, active bool, editing bool) string {
 	if active && editing {
-		return focusStyle.Render(" " + title + " ")
+		return styles.Focus.Render(" " + title + " ")
 	}
 	if active {
-		return panelTitleStyle.Render("> " + title)
+		return styles.PanelTitle.Render("> " + title)
 	}
-	return panelTitleStyle.Render(title)
+	return styles.PanelTitle.Render(title)
 }
 
 func trimToWidth(s string, width int) string {
@@ -1539,10 +1617,14 @@ func textareaHalfPageUp(t *textarea.Model) {
 }
 
 func selectedToken(s string) string {
+	return selectedTokenWithStyles(defaultStyleSet(), s)
+}
+
+func selectedTokenWithStyles(styles StyleSet, s string) string {
 	if s == "" {
 		return ""
 	}
-	return selectedRowStyle.Render(s)
+	return styles.SelectedRow.Render(s)
 }
 
 func clamp(v, low, high int) int {

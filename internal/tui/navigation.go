@@ -39,7 +39,7 @@ func (m model) updateCategorySearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if p := m.currentPage(); p != nil {
 			p.Preview()
 			p.takeToolUse() // Opening a search result is navigation only.
-			m.status = p.Status()
+			m.setPageStatus(p)
 		}
 		return m, nil
 	case "down":
@@ -72,7 +72,7 @@ func (m model) leaveContext() model {
 		if p := m.currentPage(); p != nil && p.IsEditing() {
 			updated, _ := p.Update(tea.KeyMsg{Type: tea.KeyEsc})
 			m.setCurrentPage(updated)
-			m.status = updated.Status()
+			m.setPageStatus(updated)
 		} else {
 			m.focus = focusTabs
 		}
@@ -87,7 +87,7 @@ func (m *model) clearCategorySearch() {
 	m.search.Blur()
 	m.focus = focusCategories
 	m.applySearch()
-	m.status = "Filter cleared"
+	m.setStatus(mutedStatus("Filter cleared"))
 }
 
 func (m *model) openSelection() {

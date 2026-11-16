@@ -48,7 +48,7 @@ func (m *model) updateRecent(key string) {
 				m.rebuildPage()
 				m.focus = focusWorkspace
 				m.showRecent = false
-				m.status = dimStyle.Render("Selected " + tab.Tool.Name())
+				m.setStatus(mutedStatus("Selected " + tab.Tool.Name()))
 				return
 			}
 		}
@@ -58,9 +58,9 @@ func (m *model) updateRecent(key string) {
 func (m model) recentView() string {
 	width := min(64, max(10, m.width-4))
 	innerWidth := max(1, width-2)
-	rows := []string{dimStyle.Render(" Open a tool without running it"), ""}
+	rows := []string{m.styles.Dim.Render(" Open a tool without running it"), ""}
 	if len(m.recentItems) == 0 {
-		rows = append(rows, textStyle.Render(" No recent tools yet"), dimStyle.Render(" Run a tool or preview valid input to add it"))
+		rows = append(rows, m.styles.Text.Render(" No recent tools yet"), m.styles.Dim.Render(" Run a tool or preview valid input to add it"))
 	} else {
 		for i, id := range m.recentItems {
 			t, ok := m.registry.Get(id)
@@ -68,17 +68,17 @@ func (m model) recentView() string {
 				continue
 			}
 			label := workspaceGroupTitle(t) + " · " + actionLabel(t)
-			style, prefix := textStyle, "  "
+			style, prefix := m.styles.Text, "  "
 			if i == m.recentSelected {
-				style, prefix = selectedRowStyle, "› "
+				style, prefix = m.styles.SelectedRow, "› "
 			}
 			rows = append(rows, style.Render(fitWidth(prefix+truncateDisplay(label, max(1, innerWidth-2)), innerWidth)))
 		}
 	}
 	if m.recent.warning != "" {
-		rows = append(rows, "", errorStyle.Render(wrapDisplayText(" "+m.recent.warning, innerWidth)))
+		rows = append(rows, "", m.styles.Error.Render(wrapDisplayText(" "+m.recent.warning, innerWidth)))
 	}
 	content := strings.Join(rows, "\n")
 	height := min(lipgloss.Height(content)+2, max(4, m.height-2))
-	return panelBoxWithTitle("Recent tools", true, content, width, height)
+	return panelBoxWithTitleStyles(m.styles, "Recent tools", true, content, width, height)
 }

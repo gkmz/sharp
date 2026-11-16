@@ -15,6 +15,7 @@ import (
 
 type jsonToolPage struct {
 	workspacePreview
+	styles         StyleSet
 	active         bool
 	selectedAction string
 	height         int
@@ -34,34 +35,49 @@ type jsonToolPage struct {
 	outputErr      bool
 	inputState     string
 	inputErr       bool
-	status         string
+	status         statusMessage
 	lastAction     string
 }
 
 func newJSONToolPage(t tool.Tool, tools map[string]tool.Tool) *jsonToolPage {
-	input := newWorkspaceInput()
+	return newJSONToolPageWithStyles(t, tools, defaultStyleSet())
+}
+
+func newJSONToolPageWithStyles(t tool.Tool, tools map[string]tool.Tool, styles StyleSet) *jsonToolPage {
+	input := newWorkspaceInputWithStyles(styles)
 
 	pathBox := textinput.New()
 	pathBox.Placeholder = "gjson path, e.g. data.user.name"
 	pathBox.Prompt = ""
-	pathBox.TextStyle, pathBox.PlaceholderStyle = textStyle, dimStyle
-	pathBox.Cursor.Style = focusStyle
+	pathBox.TextStyle, pathBox.PlaceholderStyle = styles.Text, styles.Dim
+	pathBox.Cursor.Style = styles.Focus
 	pathBox.Blur()
 
 	p := &jsonToolPage{
+		styles:         styles,
 		active:         true,
 		selectedAction: t.ID(),
 		input:          input,
 		pathBox:        pathBox,
 		output:         viewport.New(80, 12),
 		tools:          tools,
-		status:         "JSON | choose an action | i edit | r/Enter run | p apply",
+		status:         mutedStatus("JSON | choose an action | i edit | r/Enter run | p apply"),
 	}
 	if _, ok := p.tools[t.ID()]; !ok {
 		p.tools[t.ID()] = t
 	}
 	p.refreshInputState()
 	return p
+}
+
+// ApplyStyles refreshes cached and nested rendering without changing page data.
+func (p *jsonToolPage) ApplyStyles(styles StyleSet) {
+	p.styles = styles
+	applyWorkspaceInputStyles(&p.input, styles)
+	p.pathBox.TextStyle = styles.Text
+	p.pathBox.PlaceholderStyle = styles.Dim
+	p.pathBox.Cursor.Style = styles.Focus
+	p.renderOutput()
 }
 
 // SetSize recalculates the JSON workbench layout and child component sizes.
@@ -110,7 +126,7 @@ func (p *jsonToolPage) Preview() {
 	}
 	if p.selectedAction == "json.get" && strings.TrimSpace(p.pathBox.Value()) == "" {
 		p.stale = true
-		p.status = dimStyle.Render("Path required; press o to edit")
+		p.status = mutedStatus("Path required; press o to edit")
 		return
 	}
 	options := tool.Options(nil)
@@ -191,7 +207,7 @@ func (p *jsonToolPage) View() string {
 	if p.inputState != "" {
 		inputTitle += " - " + p.inputState
 	}
-	inputBlock := workspaceSection(inputTitle, p.active && p.editing && p.field == editFieldInput, workspaceInputView(p.input, p.active, "Paste JSON with v, or i to edit"), p.width, p.inputBoxH)
+	inputBlock := workspaceSection(inputTitle, p.active && p.editing && p.field == editFieldInput, workspaceInputView(p.input, p.active, "Paste JSON with v, or i to edit", p.styles), p.width, p.inputBoxH, p.styles)
 	var path strings.Builder
 	if p.field == editFieldOptions && p.editing {
 		path.WriteString(p.pathBox.View())
@@ -200,15 +216,15 @@ func (p *jsonToolPage) View() string {
 		if value == "" {
 			value = "gjson path"
 		}
-		path.WriteString(dimStyle.Render(value))
+		path.WriteString(p.styles.Dim.Render(value))
 	}
-	pathBlock := workspaceSection("Path", p.active && p.editing && p.field == editFieldOptions, path.String(), p.width, p.pathBoxH)
-	output := workspaceOutputView(p.output, p.outputText, p.lastAction, workspaceOutputHint(true, true))
+	pathBlock := workspaceSection("Path", p.active && p.editing && p.field == editFieldOptions, path.String(), p.width, p.pathBoxH, p.styles)
+	output := workspaceOutputView(p.output, p.outputText, p.lastAction, workspaceOutputHint(true, true), p.styles)
 	selectedName := ""
 	if t := p.tools[p.selectedAction]; t != nil {
 		selectedName = t.Name()
 	}
-	outputBlock := workspaceSection(p.workspacePreview.title(p.lastAction, selectedName), false, output, p.width, p.outputBoxH)
+	outputBlock := workspaceSection(p.workspacePreview.title(p.lastAction, selectedName), false, output, p.width, p.outputBoxH, p.styles)
 	if p.pathBoxH > 0 {
 		return lipgloss.JoinVertical(lipgloss.Left, inputBlock, pathBlock, outputBlock)
 	}
@@ -302,8 +318,10 @@ func (p *jsonToolPage) OutputText() string {
 
 // Status returns the latest user-facing JSON workbench status.
 func (p *jsonToolPage) Status() string {
-	return p.status
+	return p.status.Render(p.styles)
 }
+
+func (p *jsonToolPage) StatusMessage() statusMessage { return p.status }
 
 // HelpText returns a compact help summary for legacy callers.
 func (p *jsonToolPage) HelpText() string {
@@ -312,7 +330,7 @@ func (p *jsonToolPage) HelpText() string {
 
 // FooterHints returns JSON-specific status bar shortcuts.
 func (p *jsonToolPage) FooterHints() string {
-	return workspaceFooter(true, true, p.selectedAction == "json.get", p.editing, p.field, "Path")
+	return workspaceFooter(true, true, p.selectedAction == "json.get", p.editing, p.field, "Path", p.styles)
 }
 
 // HelpCommands returns structured JSON workbench commands for the help overlay.
@@ -354,7 +372,7 @@ func (p *jsonToolPage) HandleKey(key string) bool {
 		p.startEditingFocusedField()
 	case "o":
 		if p.selectedAction != "json.get" {
-			p.status = dimStyle.Render("This action has no options")
+			p.status = mutedStatus("This action has no options")
 			return true
 		}
 		p.FocusOptions()
@@ -374,7 +392,7 @@ func (p *jsonToolPage) runPathQuery() {
 	path := strings.TrimSpace(p.pathBox.Value())
 	if path == "" {
 		p.FocusOptions()
-		p.status = dimStyle.Render("Path empty; press o to edit, then Enter to query")
+		p.status = mutedStatus("Path empty; press o to edit, then Enter to query")
 		return
 	}
 	p.runAction("json.get", tool.Options{"path": path}, false)
@@ -388,16 +406,16 @@ func (p *jsonToolPage) runAction(id string, options tool.Options, preview bool) 
 		p.outputText = "missing JSON action: " + id
 		p.outputErr = true
 		p.renderOutput()
-		p.status = errorStyle.Render(p.outputText)
+		p.status = errorStatus(p.outputText)
 		return
 	}
 	// 校验只更新状态，不覆盖可继续处理的数据结果。
 	if id == "json.validate" {
 		out, err := t.Run(context.Background(), tool.Input{Text: p.input.Value()}, options)
 		if err != nil {
-			p.status = errorStyle.Render(err.Error())
+			p.status = errorStatus(err.Error())
 		} else {
-			p.status = successStyle.Render(out.Text)
+			p.status = successStatus(out.Text)
 			p.markToolUsed(id)
 		}
 		return
@@ -406,7 +424,7 @@ func (p *jsonToolPage) runAction(id string, options tool.Options, preview bool) 
 	if err != nil {
 		if preview {
 			p.stale = true
-			p.status = dimStyle.Render("JSON incomplete or invalid; preview paused")
+			p.status = mutedStatus("JSON incomplete or invalid; preview paused")
 			return
 		}
 		p.settled()
@@ -414,7 +432,7 @@ func (p *jsonToolPage) runAction(id string, options tool.Options, preview bool) 
 		p.outputText = err.Error()
 		p.outputErr = true
 		p.renderOutput()
-		p.status = errorStyle.Render("failed: " + t.Name())
+		p.status = errorStatus("failed: " + t.Name())
 		return
 	}
 	p.settled()
@@ -422,22 +440,22 @@ func (p *jsonToolPage) runAction(id string, options tool.Options, preview bool) 
 	p.outputText = out.Text
 	p.outputErr = false
 	p.renderOutput()
-	p.status = workspaceRunStatus(t, preview)
+	p.status = workspaceRunStatus(t, preview, p.styles)
 	p.markToolUsed(id)
 }
 
 func (p *jsonToolPage) applyOutput() {
 	if !p.OutputReady() {
-		p.status = errorStyle.Render("Output is stale; update Input/Options or run again")
+		p.status = errorStatus("Output is stale; update Input/Options or run again")
 		return
 	}
 	if p.outputErr {
-		p.status = errorStyle.Render("Cannot apply an error; fix Input and run again")
+		p.status = errorStatus("Cannot apply an error; fix Input and run again")
 		return
 	}
 	text := p.OutputText()
 	if text == "" {
-		p.status = dimStyle.Render("nothing to apply")
+		p.status = mutedStatus("nothing to apply")
 		return
 	}
 	p.pushInputUndo()
@@ -446,12 +464,12 @@ func (p *jsonToolPage) applyOutput() {
 	p.changed()
 	p.refreshInputState()
 	p.ClearOutput()
-	p.status = successStyle.Render("applied output to input")
+	p.status = successStatus("applied output to input")
 }
 
 func (p *jsonToolPage) undoInput() {
 	if len(p.inputUndo) == 0 {
-		p.status = dimStyle.Render("nothing to undo")
+		p.status = mutedStatus("nothing to undo")
 		return
 	}
 	current := p.input.Value()
@@ -461,12 +479,12 @@ func (p *jsonToolPage) undoInput() {
 	p.input.SetValue(last)
 	p.changed()
 	p.refreshInputState()
-	p.status = successStyle.Render("undo input")
+	p.status = successStatus("undo input")
 }
 
 func (p *jsonToolPage) redoInput() {
 	if len(p.inputRedo) == 0 {
-		p.status = dimStyle.Render("nothing to redo")
+		p.status = mutedStatus("nothing to redo")
 		return
 	}
 	current := p.input.Value()
@@ -476,7 +494,7 @@ func (p *jsonToolPage) redoInput() {
 	p.input.SetValue(next)
 	p.changed()
 	p.refreshInputState()
-	p.status = successStyle.Render("redo input")
+	p.status = successStatus("redo input")
 }
 
 func (p *jsonToolPage) trackInputChange(before string) {
@@ -507,7 +525,7 @@ func (p *jsonToolPage) pushInputUndoValue(value string) {
 func (p *jsonToolPage) renderOutput() {
 	wrapped := wrapDisplayText(p.outputText, max(1, p.output.Width))
 	if p.outputErr {
-		wrapped = errorStyle.Render(wrapped)
+		wrapped = p.styles.Error.Render(wrapped)
 	}
 	p.output.SetContent(wrapped)
 }
@@ -536,16 +554,16 @@ func (p *jsonToolPage) refreshInputState() {
 	if text == "" {
 		p.inputState = "empty"
 		p.inputErr = false
-		p.status = dimStyle.Render("JSON input empty")
+		p.status = mutedStatus("JSON input empty")
 		return
 	}
 	if err := jsonutil.RejectDuplicateObjectKeys(text); err != nil {
 		p.inputState = "invalid JSON"
 		p.inputErr = true
-		p.status = errorStyle.Render(err.Error())
+		p.status = errorStatus(err.Error())
 		return
 	}
 	p.inputState = "valid JSON"
 	p.inputErr = false
-	p.status = successStyle.Render("valid JSON")
+	p.status = successStatus("valid JSON")
 }
