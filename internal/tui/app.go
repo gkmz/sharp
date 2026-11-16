@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/gkmz/sharp/internal/clipboard"
+	sharptheme "github.com/gkmz/sharp/internal/theme"
 	"github.com/gkmz/sharp/pkg/tool"
 )
 
@@ -86,6 +87,10 @@ type model struct {
 	registry      *tool.Registry
 	readClipboard func() (string, error)
 	styles        StyleSet
+	themes        *sharptheme.Registry
+	activeThemeID string
+	saveTheme     func(string) error
+	themePicker   themePicker
 
 	allCategories []categoryGroup
 	categories    []categoryGroup
@@ -115,7 +120,12 @@ type model struct {
 
 // Run starts the interactive Bubble Tea application for registry.
 func Run(registry *tool.Registry) error {
-	m := newModel(registry)
+	return RunWithOptions(registry, Options{})
+}
+
+// RunWithOptions starts the TUI with an injected theme registry and persistence.
+func RunWithOptions(registry *tool.Registry, options Options) error {
+	m := newModelWithOptions(registry, options)
 	m.initRecent()
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
@@ -202,7 +212,7 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// 定时消息始终交回原工作台，不受搜索、帮助或当前区域影响。
 		msg.page.Update(msg)
-		if p := m.currentPage(); p == msg.page && !m.showHelp && !m.showRecent && m.focus != focusSearch {
+		if p := m.currentPage(); p == msg.page && !m.showHelp && !m.showRecent && !m.themePicker.open && m.focus != focusSearch {
 			m.setPageStatus(p)
 		}
 		return m, nil
@@ -214,6 +224,10 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		key := msg.String()
 		if key == "ctrl+c" || key == "ctrl+q" {
 			return m, tea.Quit
+		}
+		if m.themePicker.open {
+			m.updateThemePicker(key)
+			return m, nil
 		}
 		if key == "esc" {
 			return m.leaveContext(), nil
@@ -252,6 +266,10 @@ func (m model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setCurrentPage(updated)
 			m.setPageStatus(updated)
 			return m, cmd
+		}
+		if key == "t" {
+			m.openThemePicker()
+			return m, nil
 		}
 		if key == "ctrl+r" {
 			m.openRecent()
@@ -417,8 +435,8 @@ func (m model) View() string {
 
 	categories := m.categoryPanel(leftWidth, categoryHeight)
 	left := categories
-	tabs := panelBoxWithStyles(m.styles, 2, m.tabsTitle(), !m.showHelp && !m.showRecent && m.focus == focusTabs, m.tabsView(rightWidth-2, panelContentHeight(toolHeight)), rightWidth, toolHeight)
-	page := panelBoxWithStyles(m.styles, 3, m.workspaceTitle(), !m.showHelp && !m.showRecent && m.focus == focusWorkspace, m.pageView(rightWidth-2, panelContentHeight(workspaceHeight)), rightWidth, workspaceHeight)
+	tabs := panelBoxWithStyles(m.styles, 2, m.tabsTitle(), !m.showHelp && !m.showRecent && !m.themePicker.open && m.focus == focusTabs, m.tabsView(rightWidth-2, panelContentHeight(toolHeight)), rightWidth, toolHeight)
+	page := panelBoxWithStyles(m.styles, 3, m.workspaceTitle(), !m.showHelp && !m.showRecent && !m.themePicker.open && m.focus == focusWorkspace, m.pageView(rightWidth-2, panelContentHeight(workspaceHeight)), rightWidth, workspaceHeight)
 	right := lipgloss.JoinVertical(lipgloss.Left, tabs, page)
 	footer := fitWidth(m.styles.Footer.Render(m.footerLine()), m.width)
 	notification := fitWidth((statusMessage{text: m.status, kind: m.statusKind}).Render(m.styles), m.width)
@@ -435,6 +453,9 @@ func (m model) View() string {
 	}
 	if m.showRecent {
 		view = placeOverlay(view, m.recentView(), m.width, m.height)
+	}
+	if m.themePicker.open {
+		view = placeOverlay(view, m.themePickerView(), m.width, m.height)
 	}
 	lines := strings.Split(fitHeight(view, m.height), "\n")
 	for i, line := range lines {
@@ -498,7 +519,7 @@ func (m model) categoryPanel(width, height int) string {
 	if end < len(m.categories) {
 		bottom = "↓ more"
 	}
-	active := !m.showHelp && !m.showRecent && (m.focus == focusCategories || m.focus == focusSearch)
+	active := !m.showHelp && !m.showRecent && !m.themePicker.open && (m.focus == focusCategories || m.focus == focusSearch)
 	return panelBoxWithLegendsStyles(m.styles, title, bottom, active, m.categoryView(width-2, panelContentHeight(height)), width, height)
 }
 
@@ -513,7 +534,7 @@ func (m model) categoryView(width, height int) string {
 		line := m.categoryLine(c, width)
 		if i == m.selectedCat {
 			style := m.styles.RetainedRow
-			if !m.showHelp && !m.showRecent && (m.focus == focusCategories || m.focus == focusSearch) {
+			if !m.showHelp && !m.showRecent && !m.themePicker.open && (m.focus == focusCategories || m.focus == focusSearch) {
 				style = m.styles.SelectedRow
 			}
 			line = style.Render(fitWidth(line, width))
@@ -558,7 +579,7 @@ func (m model) tabsView(width, height int) string {
 	for _, tab := range cat.Tabs {
 		labels = append(labels, actionLabel(tab.Tool))
 	}
-	return flowLabelsWithStyles(m.styles, width, height, labels, m.selectedTab, !m.showHelp && !m.showRecent && m.focus == focusTabs)
+	return flowLabelsWithStyles(m.styles, width, height, labels, m.selectedTab, !m.showHelp && !m.showRecent && !m.themePicker.open && m.focus == focusTabs)
 }
 
 func flowLabels(width, height int, labels []string, selected int, active bool) string {
@@ -653,7 +674,7 @@ func (m model) pageView(width, height int) string {
 	if tab := m.currentTab(); tab != nil {
 		b.WriteString(m.styles.Dim.Render(truncateDisplay(tab.Tool.Description(), width)) + "\n")
 	}
-	p.SetActive(!m.showHelp && !m.showRecent && m.focus == focusWorkspace)
+	p.SetActive(!m.showHelp && !m.showRecent && !m.themePicker.open && m.focus == focusWorkspace)
 	b.WriteString(p.View())
 	return b.String()
 }
@@ -686,9 +707,9 @@ func (m model) footerLine() string {
 	case focusSearch:
 		return modeStatusLine(m.styles, "SEARCH", "Categories", statusHintWithStyles(m.styles, "↑/↓", "select"), statusHintWithStyles(m.styles, "Enter", "open"), statusHintWithStyles(m.styles, "Esc", "clear"))
 	case focusCategories:
-		return modeStatusLine(m.styles, "NORMAL", "Categories", statusHintWithStyles(m.styles, "s", "search"), statusHintWithStyles(m.styles, "j/k/↑/↓", "select"), statusHintWithStyles(m.styles, "Tab", "area"), statusHintWithStyles(m.styles, "^R", "recent"), statusHintWithStyles(m.styles, "?", "help"))
+		return m.withThemeHint(modeStatusLine(m.styles, "NORMAL", "Categories", statusHintWithStyles(m.styles, "s", "search"), statusHintWithStyles(m.styles, "j/k/↑/↓", "select"), statusHintWithStyles(m.styles, "Tab", "area"), statusHintWithStyles(m.styles, "^R", "recent"), statusHintWithStyles(m.styles, "?", "help")))
 	case focusTabs:
-		return modeStatusLine(m.styles, "NORMAL", "Actions", statusHintWithStyles(m.styles, "←/→", "select"), statusHintWithStyles(m.styles, "Tab", "area"), statusHintWithStyles(m.styles, "Enter", "run"), statusHintWithStyles(m.styles, "^R", "recent"), statusHintWithStyles(m.styles, "?", "help"))
+		return m.withThemeHint(modeStatusLine(m.styles, "NORMAL", "Actions", statusHintWithStyles(m.styles, "←/→", "select"), statusHintWithStyles(m.styles, "Tab", "area"), statusHintWithStyles(m.styles, "Enter", "run"), statusHintWithStyles(m.styles, "^R", "recent"), statusHintWithStyles(m.styles, "?", "help")))
 	case focusWorkspace:
 		if p := m.currentPage(); p != nil {
 			if hints := p.FooterHints(); hints != "" {
@@ -697,13 +718,22 @@ func (m model) footerLine() string {
 					if lipgloss.Width(hints)+1+lipgloss.Width(recent) <= m.width {
 						hints += " " + recent
 					}
+					hints = m.withThemeHint(hints)
 				}
 				return hints
 			}
-			return modeStatusLine(m.styles, "NORMAL", "Workspace", statusHintWithStyles(m.styles, "r/Enter", "run"), statusHintWithStyles(m.styles, "i", "edit"), statusHintWithStyles(m.styles, "v", "paste"), statusHintWithStyles(m.styles, "y", "copy"), statusHintWithStyles(m.styles, "?", "help"))
+			return m.withThemeHint(modeStatusLine(m.styles, "NORMAL", "Workspace", statusHintWithStyles(m.styles, "r/Enter", "run"), statusHintWithStyles(m.styles, "i", "edit"), statusHintWithStyles(m.styles, "v", "paste"), statusHintWithStyles(m.styles, "y", "copy"), statusHintWithStyles(m.styles, "?", "help")))
 		}
 	}
 	return ""
+}
+
+func (m model) withThemeHint(line string) string {
+	hint := statusHintWithStyles(m.styles, "t", "theme")
+	if lipgloss.Width(line)+1+lipgloss.Width(hint) <= m.width {
+		return line + " " + hint
+	}
+	return line
 }
 
 func statusLine(scope string, hints ...string) string {
@@ -768,6 +798,7 @@ func (m model) helpContent() string {
 
 func (m model) helpSections() []helpSection {
 	global := []helpCommand{
+		{Key: "t", Command: "Themes", Description: "Preview built-in and custom themes in Normal mode; Enter saves and Esc restores the previous theme."},
 		{Key: "ctrl+r", Command: "Recent Tools", Description: "Open the five most recently used actions in Normal mode. Enter opens the workspace without running; Esc returns."},
 		{Key: "Tab/Shift+Tab", Command: "Change Area", Description: "Cycle Categories, Actions and Workspace in Normal mode; Esc leaves editing first."},
 		{Key: "[ / ]", Command: "Change Action", Description: "Select the previous/next action in the current group without changing area."},

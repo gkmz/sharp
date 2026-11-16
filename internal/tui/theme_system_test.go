@@ -2,10 +2,12 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	sharptheme "github.com/gkmz/sharp/internal/theme"
+	sharptools "github.com/gkmz/sharp/internal/tools"
 	"github.com/gkmz/sharp/pkg/tool"
 )
 
@@ -23,6 +25,79 @@ func TestStyleSetsAreThemeSpecific(t *testing.T) {
 	}
 	if first.SelectedRow.GetBackground() == second.SelectedRow.GetBackground() {
 		t.Fatal("different themes produced the same selection background")
+	}
+}
+
+func TestThemePickerPreviewsCancelsAndPersists(t *testing.T) {
+	registry, _ := sharptheme.NewRegistry(nil)
+	active, _ := registry.Lookup("sharp-color")
+	var saved []string
+	m := newModelWithOptions(sharptools.NewRegistry(), Options{
+		Themes:      registry,
+		ActiveTheme: active,
+		SaveTheme: func(id string) error {
+			saved = append(saved, id)
+			return nil
+		},
+	})
+
+	m = workflowKey(m, "t")
+	if !m.themePicker.open || m.themePicker.originalID != "sharp-color" {
+		t.Fatalf("picker after open = %#v", m.themePicker)
+	}
+	m = workflowKey(m, "down")
+	preview := m.activeThemeID
+	if preview == "sharp-color" || len(saved) != 0 {
+		t.Fatalf("preview = %q, saved = %v", preview, saved)
+	}
+	m = workflowKey(m, "esc")
+	if m.themePicker.open || m.activeThemeID != "sharp-color" || len(saved) != 0 {
+		t.Fatalf("cancel left picker=%v active=%q saved=%v", m.themePicker.open, m.activeThemeID, saved)
+	}
+
+	m = workflowKey(m, "t")
+	m = workflowKey(m, "down")
+	want := m.activeThemeID
+	m = workflowKey(m, "enter")
+	if m.themePicker.open || len(saved) != 1 || saved[0] != want {
+		t.Fatalf("confirm left picker=%v active=%q saved=%v", m.themePicker.open, m.activeThemeID, saved)
+	}
+}
+
+func TestThemePickerSaveFailureKeepsPreview(t *testing.T) {
+	registry, _ := sharptheme.NewRegistry(nil)
+	active, _ := registry.Lookup("sharp-color")
+	m := newModelWithOptions(sharptools.NewRegistry(), Options{
+		Themes:      registry,
+		ActiveTheme: active,
+		SaveTheme: func(string) error {
+			return errors.New("disk full")
+		},
+	})
+	m = workflowKey(m, "t")
+	m = workflowKey(m, "down")
+	preview := m.activeThemeID
+	m = workflowKey(m, "enter")
+	if m.themePicker.open || m.activeThemeID != preview {
+		t.Fatalf("save failure reverted active theme: picker=%v active=%q", m.themePicker.open, m.activeThemeID)
+	}
+	if !strings.Contains(m.status, "disk full") || m.statusKind != statusError {
+		t.Fatalf("save failure status = %q kind=%v", m.status, m.statusKind)
+	}
+}
+
+func TestThemePickerDoesNotOpenWhileEditing(t *testing.T) {
+	registry, _ := sharptheme.NewRegistry(nil)
+	active, _ := registry.Lookup("sharp-color")
+	m := newModelWithOptions(sharptools.NewRegistry(), Options{Themes: registry, ActiveTheme: active})
+	m.focus = focusWorkspace
+	m = workflowKey(m, "i")
+	m = workflowKey(m, "t")
+	if m.themePicker.open {
+		t.Fatal("theme picker opened while a workspace editor was active")
+	}
+	if page := m.currentPage(); page == nil || !page.IsEditing() {
+		t.Fatal("theme shortcut interrupted workspace editing")
 	}
 }
 
