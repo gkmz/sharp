@@ -68,7 +68,7 @@ func NewStyleSet(current sharptheme.Theme) StyleSet {
 		Action:        lipgloss.NewStyle().Foreground(action),
 		Shortcut:      lipgloss.NewStyle().Foreground(shortcut),
 		ActiveLabel:   lipgloss.NewStyle().Bold(true).Foreground(selectionForeground).Background(selectionBackground),
-		RetainedLabel: lipgloss.NewStyle().Bold(true).Foreground(retainedForeground).Underline(true),
+		RetainedLabel: lipgloss.NewStyle().Bold(true).Foreground(accent).Underline(true),
 		Dim:           lipgloss.NewStyle().Foreground(muted),
 		Error:         lipgloss.NewStyle().Foreground(failure),
 		Warning:       lipgloss.NewStyle().Foreground(warning),
