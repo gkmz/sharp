@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gkmz/sharp/internal/config"
+	sharptheme "github.com/gkmz/sharp/internal/theme"
 	"github.com/gkmz/sharp/internal/tools"
 	"github.com/gkmz/sharp/internal/tui"
 	"github.com/gkmz/sharp/pkg/tool"
@@ -30,6 +32,27 @@ func Execute() error {
 
 // NewRootCommand builds the root command around registry.
 func NewRootCommand(registry *tool.Registry) *cobra.Command {
+	return newRootCommand(registry, defaultRootDependencies())
+}
+
+type rootDependencies struct {
+	getenv     func(string) string
+	configPath func() (string, error)
+	loadConfig func(string) (*config.Config, error)
+	runTUI     func(*tool.Registry, tui.Options) error
+}
+
+func defaultRootDependencies() rootDependencies {
+	return rootDependencies{
+		getenv:     os.Getenv,
+		configPath: config.DefaultPath,
+		loadConfig: config.Load,
+		runTUI:     tui.RunWithOptions,
+	}
+}
+
+func newRootCommand(registry *tool.Registry, dependencies rootDependencies) *cobra.Command {
+	var themeFlag string
 	root := &cobra.Command{
 		Use:   "sharp",
 		Short: "Interactive terminal toolkit for developers",
@@ -39,15 +62,73 @@ func NewRootCommand(registry *tool.Registry) *cobra.Command {
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
-				return tui.Run(registry)
+				return dependencies.runTUI(registry, resolveTUIOptions(themeFlag, dependencies))
 			}
 			return cmd.Help()
 		},
 	}
+	root.Flags().StringVar(&themeFlag, "theme", "", "TUI theme ID (overrides SHARP_THEME and config)")
 	root.AddCommand(listCommand(registry))
 	root.AddCommand(versionCommand())
 	addToolCommands(root, registry)
 	return root
+}
+
+func selectThemeID(flagID, envID, savedID string) string {
+	for _, id := range []string{flagID, envID, savedID, "sharp-color"} {
+		if strings.TrimSpace(id) != "" {
+			return strings.TrimSpace(id)
+		}
+	}
+	return "sharp-color"
+}
+
+func resolveTUIOptions(flagID string, dependencies rootDependencies) tui.Options {
+	alerts := make([]string, 0)
+	var loaded *config.Config
+	path, pathErr := dependencies.configPath()
+	if pathErr != nil {
+		alerts = append(alerts, "Theme configuration is unavailable: "+pathErr.Error())
+	} else {
+		var err error
+		loaded, err = dependencies.loadConfig(path)
+		if err != nil {
+			alerts = append(alerts, "Theme configuration could not be loaded: "+err.Error())
+		}
+	}
+
+	definitions := map[string]sharptheme.Definition{}
+	savedID := ""
+	if loaded != nil {
+		definitions = loaded.ThemeDefinitions()
+		savedID = loaded.SelectedTheme()
+	}
+	themes, diagnostics := sharptheme.NewRegistry(definitions)
+	for _, diagnostic := range diagnostics {
+		alerts = append(alerts, diagnostic.String())
+	}
+	selectedID := selectThemeID(flagID, dependencies.getenv("SHARP_THEME"), savedID)
+	active, ok := themes.Lookup(selectedID)
+	if !ok {
+		alerts = append(alerts, fmt.Sprintf("Unknown theme %q; using sharp-color", selectedID))
+		active, _ = themes.Lookup("sharp-color")
+	}
+
+	saveTheme := func(id string) error {
+		if loaded != nil {
+			return loaded.SaveTheme(id)
+		}
+		if pathErr != nil {
+			return fmt.Errorf("theme configuration path is unavailable: %w", pathErr)
+		}
+		return fmt.Errorf("theme configuration %s could not be loaded", path)
+	}
+	return tui.Options{
+		Themes:        themes,
+		ActiveTheme:   active,
+		SaveTheme:     saveTheme,
+		StartupAlerts: alerts,
+	}
 }
 
 func listCommand(registry *tool.Registry) *cobra.Command {
