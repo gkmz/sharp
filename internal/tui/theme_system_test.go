@@ -6,9 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	sharptheme "github.com/gkmz/sharp/internal/theme"
 	sharptools "github.com/gkmz/sharp/internal/tools"
 	"github.com/gkmz/sharp/pkg/tool"
+	"github.com/muesli/termenv"
 )
 
 func TestStyleSetsAreThemeSpecific(t *testing.T) {
@@ -98,6 +100,37 @@ func TestThemePickerDoesNotOpenWhileEditing(t *testing.T) {
 	}
 	if page := m.currentPage(); page == nil || !page.IsEditing() {
 		t.Fatal("theme shortcut interrupted workspace editing")
+	}
+}
+
+func TestThemeChangePreservesLayoutAndChangesSemanticColors(t *testing.T) {
+	profile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(profile) })
+
+	registry, _ := sharptheme.NewRegistry(nil)
+	active, _ := registry.Lookup("sharp-color")
+	m := newModelWithOptions(sharptools.NewRegistry(), Options{Themes: registry, ActiveTheme: active})
+	m.width, m.height = 120, 36
+	m.resize()
+	before := m.View()
+	if !m.applyTheme("lazygit") {
+		t.Fatal("could not apply lazygit theme")
+	}
+	after := m.View()
+	if stripANSI(before) != stripANSI(after) {
+		t.Fatal("theme change altered rendered text or layout")
+	}
+	if before == after {
+		t.Fatal("theme change did not alter ANSI rendering")
+	}
+	if lipgloss.Width(before) != lipgloss.Width(after) || lipgloss.Height(before) != lipgloss.Height(after) {
+		t.Fatal("theme change altered rendered dimensions")
+	}
+	if m.styles.Category.GetForeground() == m.styles.Group.GetForeground() ||
+		m.styles.Group.GetForeground() == m.styles.Action.GetForeground() ||
+		m.styles.Category.GetForeground() == m.styles.Action.GetForeground() {
+		t.Fatal("lazygit theme does not distinguish category, group, and action roles")
 	}
 }
 
