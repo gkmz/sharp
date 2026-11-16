@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -131,6 +132,27 @@ func TestThemeChangePreservesLayoutAndChangesSemanticColors(t *testing.T) {
 		m.styles.Group.GetForeground() == m.styles.Action.GetForeground() ||
 		m.styles.Category.GetForeground() == m.styles.Action.GetForeground() {
 		t.Fatal("lazygit theme does not distinguish category, group, and action roles")
+	}
+}
+
+func TestThemePickerKeepsSelectedCustomThemeVisible(t *testing.T) {
+	definitions := make(map[string]sharptheme.Definition)
+	for i := 0; i < 20; i++ {
+		definitions[fmt.Sprintf("custom-%02d", i)] = sharptheme.Definition{Extends: "sharp-color"}
+	}
+	registry, diagnostics := sharptheme.NewRegistry(definitions)
+	if len(diagnostics) != 0 {
+		t.Fatal(diagnostics)
+	}
+	active, _ := registry.Lookup("sharp-color")
+	m := newModelWithOptions(sharptools.NewRegistry(), Options{Themes: registry, ActiveTheme: active})
+	m.width, m.height = 80, 16
+	m.openThemePicker()
+	m.themePicker.selected = len(m.themePicker.entries) - 1
+	m.applyTheme(m.themePicker.entries[m.themePicker.selected].ID)
+
+	if view := stripANSI(m.themePickerView()); !strings.Contains(view, "custom-19") {
+		t.Fatalf("selected theme is outside picker window:\n%s", view)
 	}
 }
 

@@ -112,8 +112,17 @@ func (m model) themePickerView() string {
 	}
 	width := min(58, max(28, m.width-4))
 	innerWidth := max(1, width-2)
+	visible := max(1, m.height-6)
+	visible = min(visible, len(m.themePicker.entries))
+	start := 0
+	if m.themePicker.selected >= visible {
+		start = m.themePicker.selected - visible + 1
+	}
+	start = min(start, max(0, len(m.themePicker.entries)-visible))
+	end := min(len(m.themePicker.entries), start+visible)
 	rows := []string{m.styles.Dim.Render(" Preview with j/k or arrows · Enter save · Esc cancel"), ""}
-	for i, current := range m.themePicker.entries {
+	for i := start; i < end; i++ {
+		current := m.themePicker.entries[i]
 		prefix := "  "
 		style := m.styles.Text
 		if i == m.themePicker.selected {
