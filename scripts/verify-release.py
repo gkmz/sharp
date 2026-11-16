@@ -34,7 +34,13 @@ def main():
             raise ValueError(f"archive missing checksum: {archive.name}")
         with tarfile.open(archive, "r:gz") as package:
             members = {member.name: member for member in package.getmembers()}
-            required = {"sharp", "LICENSE", "README.md", "docs/README.zh-CN.md"}
+            required = {
+                "sharp",
+                "LICENSE",
+                "README.md",
+                "docs/README.zh-CN.md",
+                "docs/assets/sharp-demo.gif",
+            }
             if not required.issubset(members):
                 raise ValueError(f"missing package files in {archive.name}: {required - members.keys()}")
             binary = members["sharp"]

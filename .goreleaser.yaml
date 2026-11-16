@@ -31,6 +31,7 @@ archives:
       - LICENSE
       - README.md
       - docs/README.zh-CN.md
+      - docs/assets/sharp-demo.gif
 
 checksum:
   name_template: checksums.txt
