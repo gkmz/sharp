@@ -5,3 +5,4 @@ build/
 *.test
 *.out
 .DS_Store
+.superpowers/
