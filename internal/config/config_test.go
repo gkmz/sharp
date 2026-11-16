@@ -43,7 +43,6 @@ func TestLoadThemeDefinitions(t *testing.T) {
 	if cfg.SelectedTheme() != "mine" || definitions["mine"].Extends != "sharp-color" || definitions["mine"].Dark["focus"] != "#112233" {
 		t.Fatalf("decoded config = theme %q, definitions %#v", cfg.SelectedTheme(), definitions)
 	}
-	definitions["mine"] = definitions["mine"]
 	definitions["extra"] = definitions["mine"]
 	if len(cfg.ThemeDefinitions()) != 1 {
 		t.Fatal("ThemeDefinitions exposed mutable configuration state")
