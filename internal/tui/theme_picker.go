@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -138,13 +136,4 @@ func (m model) themePickerView() string {
 	content := strings.Join(rows, "\n")
 	height := min(lipgloss.Height(content)+2, max(6, m.height-2))
 	return panelBoxWithTitleStyles(m.styles, "Themes", true, content, width, height)
-}
-
-func unavailableThemeSaver(path string) func(string) error {
-	return func(string) error {
-		if path == "" {
-			return errors.New("configuration path is unavailable")
-		}
-		return fmt.Errorf("configuration %s is unavailable", path)
-	}
 }
