@@ -350,6 +350,8 @@ Project layout:
 ```text
 cmd/sharp              CLI entrypoint
 internal/cli           Cobra command tree
+internal/config        YAML configuration loading and persistence
+internal/theme         Semantic theme domain and built-in palettes
 internal/tui           Bubble Tea TUI
 internal/tools         Built-in tools and default registry
 pkg/tool               Public tool contract and registry

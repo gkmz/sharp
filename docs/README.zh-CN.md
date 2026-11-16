@@ -350,6 +350,8 @@ GOCACHE=/private/tmp/sharp-gocache go vet ./...
 ```text
 cmd/sharp              CLI 入口
 internal/cli           Cobra 命令树
+internal/config        YAML 配置加载与持久化
+internal/theme         语义主题模型与内置调色板
 internal/tui           Bubble Tea TUI
 internal/tools         内置工具和默认 registry
 pkg/tool               公共工具接口和 registry
