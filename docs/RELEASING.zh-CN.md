@@ -20,7 +20,7 @@ goreleaser release --snapshot --clean
 python3 scripts/verify-release.py dist
 ```
 
-snapshot 是仅供本地验证、不会上传的开发包；允许在未打标签或有改动的目录构建，不可当作正式版本分发。四个目标为 macOS/Linux × amd64/arm64；tar.gz 包含可执行文件、LICENSE 和中英文 README，并生成 checksums.txt。Python 脚本核对所有校验和和包内容，执行本机架构的 version 和 URL 命令。交叉编译成功不能代替目标平台运行验证；原生 CI 仅验证托管 runner 所在架构，其余架构在正式发布前应安排本机检查。
+snapshot 是仅供本地验证、不会上传的开发包；允许在未打标签或有改动的目录构建，不可当作正式版本分发。四个目标为 macOS/Linux × amd64/arm64；tar.gz 包含可执行文件、LICENSE、中英文 README 和 README 使用的 TUI 演示图，并在 Release 层生成 checksums.txt。Python 脚本核对所有校验和和包内容，执行本机架构的 version 和 URL 命令。交叉编译成功不能代替目标平台运行验证；原生 CI 仅验证托管 runner 所在架构，其余架构在正式发布前应安排本机检查。
 
 PR CI 同样检查 snapshot 安装包。标签发布流程会在两个系统重新执行 Go 检查和 race 测试，全部通过后才打包。
 

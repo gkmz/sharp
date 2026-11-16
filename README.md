@@ -14,7 +14,7 @@
 [![TUI](https://img.shields.io/badge/TUI-Bubble%20Tea-FF75B7?style=for-the-badge)](https://github.com/charmbracelet/bubbletea)
 [![CLI](https://img.shields.io/badge/CLI-Cobra-6F42C1?style=for-the-badge)](https://github.com/spf13/cobra)
 [![Status](https://img.shields.io/badge/Status-Pre--1.0-orange?style=for-the-badge)](docs/CHANGELOG.md)
-[![Tests](https://img.shields.io/badge/Tests-go%20test%20%2F%20go%20vet-success?style=for-the-badge)](#development)
+[![CI](https://github.com/gkmz/sharp/actions/workflows/go.yml/badge.svg)](https://github.com/gkmz/sharp/actions/workflows/go.yml)
 
 [Chinese Documentation](docs/README.zh-CN.md)
 
@@ -32,9 +32,19 @@ The project is designed for everyday developer workflows: paste data, transform 
 | ![Tools](https://img.shields.io/badge/Tools-built--in-blue) | JSON, Encode, Crypto, Time, Text, Network, Convert, Inspector, and Generator workflows. |
 | ![Local](https://img.shields.io/badge/Local-first-lightgrey) | Runs locally and avoids service dependencies for core transformations. |
 
+![Sharp TUI demo](docs/assets/sharp-demo.gif)
+
 ## Installation
 
-Install from a local checkout or try the current main branch with `go install github.com/gkmz/sharp/cmd/sharp@main` (requires Go 1.25.1+):
+Sharp requires Go 1.25.1 or newer. Install the latest stable version:
+
+```bash
+go install github.com/gkmz/sharp/cmd/sharp@latest
+```
+
+Use `@v0.1.0` instead of `@latest` for the first fixed release, or `@main` to try the current development branch.
+
+Install from a local checkout:
 
 ```bash
 git clone https://github.com/gkmz/sharp.git
@@ -52,12 +62,12 @@ sharp version
 
 Add the export to your shell startup file (for zsh, `~/.zshrc`). A custom GOBIN needs its own PATH entry. If an older `/usr/local/bin/sharp` still runs, inspect `type -a sharp` and refresh the shell's command cache (`rehash` in zsh). To update from this checkout, rerun `go install ./cmd/sharp`.
 
-Published versions are listed on [GitHub Releases](https://github.com/gkmz/sharp/releases). Release archives target macOS/Linux on amd64 and arm64, with LICENSE, both READMEs and `checksums.txt`. Once a version tag is available, Go users can install `go install github.com/gkmz/sharp/cmd/sharp@v0.1.0` (fixed version) or `@latest` (latest stable module version). Homebrew distribution is planned separately.
+Published versions are listed on [GitHub Releases](https://github.com/gkmz/sharp/releases). Release archives target macOS/Linux on amd64 and arm64 and include LICENSE and both READMEs; each release also provides `checksums.txt`. Homebrew distribution is planned separately.
 
 For a release archive, select `darwin_arm64` for Apple Silicon, `darwin_amd64` for Intel Macs, or the corresponding Linux architecture (`uname -s; uname -m`). Download the archive and `checksums.txt` from the same Release into an empty directory, then verify the selected file (the following name is an example for the first Apple Silicon release):
 
 ```bash
-# After v0.1.0 is published and downloaded:
+# After downloading the v0.1.0 archive and checksums.txt:
 grep '  sharp_0.1.0_darwin_arm64.tar.gz$' checksums.txt | shasum -a 256 -c -
 tar -xzf sharp_0.1.0_darwin_arm64.tar.gz
 mkdir -p "$HOME/.local/bin"
@@ -73,6 +83,38 @@ Run directly during development:
 ```bash
 go run ./cmd/sharp
 ```
+
+### Update or uninstall
+
+Update an installation made with Go:
+
+```bash
+go install github.com/gkmz/sharp/cmd/sharp@latest
+```
+
+For a local checkout, pull the desired revision and rerun `go install ./cmd/sharp`. To uninstall a Go-installed binary, resolve its installation directory before removing it:
+
+```bash
+install_dir="$(go env GOBIN)"
+[ -n "$install_dir" ] || install_dir="$(go env GOPATH)/bin"
+rm "$install_dir/sharp"
+```
+
+For a release archive installed with the example above, remove `$HOME/.local/bin/sharp` instead.
+
+## Quick Start
+
+Launch the TUI or run the same tools from the shell:
+
+```bash
+sharp
+sharp list
+echo '{"data":{"id":1}}' | sharp json get --path data.id
+sharp url encode --mode component '^@#$ a+b'
+sharp token --bytes 32 --format base64url
+```
+
+Use `sharp --help`, `sharp <group> --help`, or `sharp <command> --help` to discover commands and options. Shell completion is available for Bash, Zsh, Fish, and PowerShell; run `sharp completion <shell> --help` for the installation command for your shell.
 
 ## TUI Usage
 
@@ -366,7 +408,11 @@ docs                   Product and development notes
 - [Changelog](./docs/CHANGELOG.md)
 - [Release Guide](docs/RELEASING.md)
 - [Product Requirements](docs/PRD.md)
-- [Development Plan](docs/DEVELOPMENT_PLAN.md)
+- [Historical Development Plan](docs/DEVELOPMENT_PLAN.md)
+
+## Support
+
+Search existing issues before opening a new report. Use the [issue templates](https://github.com/gkmz/sharp/issues/new/choose) for reproducible bugs and feature proposals. Report security vulnerabilities privately as described in the [Security Policy](docs/SECURITY.md); do not include vulnerability details in a public issue.
 
 ## License
 

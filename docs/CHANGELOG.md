@@ -14,6 +14,13 @@ The format is based on Keep a Changelog, and this project currently uses pre-1.0
 ### Changed
 
 - `sharp-color` is now the default TUI palette; the previous restrained appearance remains available as `sharp`. Theme selection does not change CLI transformation output.
+- Updated the English and Chinese READMEs with an actual CI badge, stable installation and lifecycle commands, a quick start, command discovery, support links, and a reproducible TUI demo included in future release archives.
+- Marked the original development plan as historical and replaced its obsolete Milestone 0 next step with current contribution guidance.
+- Corrected pre-release wording now that v0.1.0 is published.
+
+### Security
+
+- Enabled GitHub private vulnerability reporting and documented a concrete confidential reporting path for vulnerabilities and sensitive conduct concerns.
 
 ## [v0.1.0] - 2026-10-31
 

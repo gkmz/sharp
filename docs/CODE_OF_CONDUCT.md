@@ -24,4 +24,4 @@ We want `sharp` to be a practical and respectful open source project. Everyone p
 
 Maintainers may remove comments, close issues, reject pull requests, or block participants when behavior violates this code of conduct.
 
-If you need to report a concern, open a private channel with the maintainers when available. If no private channel exists yet, avoid posting sensitive personal information publicly and use the repository's issue tracker only for non-sensitive project concerns.
+Report sensitive conduct concerns through the repository's [private reporting form](https://github.com/gkmz/sharp/security/advisories/new) and prefix the title with `[Conduct]`. Use the public issue tracker only for non-sensitive project concerns, and never post another person's private information publicly.

@@ -20,7 +20,7 @@ goreleaser release --snapshot --clean
 python3 scripts/verify-release.py dist
 ```
 
-Snapshots are local, unpublished development packages. They can be built in an untagged/dirty checkout, so they are for validation and must not be presented as a tagged release. The packager produces macOS/Linux × amd64/arm64 tar.gz archives, LICENSE, both READMEs, and checksums.txt; the Python check verifies every checksum/archive and runs the host package's version and URL commands. Cross-compilation does not prove execution on every target: native CI runs Linux/macOS on its hosted runner architecture; manually smoke other target architectures before claiming support.
+Snapshots are local, unpublished development packages. They can be built in an untagged/dirty checkout, so they are for validation and must not be presented as a tagged release. The packager produces macOS/Linux × amd64/arm64 tar.gz archives containing LICENSE, both READMEs, and the README's TUI demo asset, plus a release-level checksums.txt; the Python check verifies every checksum/archive and runs the host package's version and URL commands. Cross-compilation does not prove execution on every target: native CI runs Linux/macOS on its hosted runner architecture; manually smoke other target architectures before claiming support.
 
 PR CI also runs the snapshot/package check. The release workflow repeats Go verification and race tests on the exact tag on both operating systems. Packaging runs only after both checks pass.
 

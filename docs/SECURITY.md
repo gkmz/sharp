@@ -10,11 +10,11 @@ Please do not disclose suspected vulnerabilities in public issues before maintai
 
 Preferred process:
 
-1. Contact the maintainers privately when a security contact is available.
-2. Include a concise description, affected command/tool, reproduction steps, and potential impact.
-3. Avoid sharing sensitive real-world secrets, tokens, or production data.
+1. Open a [private vulnerability report](https://github.com/gkmz/sharp/security/advisories/new) on GitHub. Only repository maintainers and the reporter can access the report while it is being reviewed.
+2. Include a concise description, affected command/tool and version, reproduction steps, and potential impact.
+3. Avoid sharing sensitive real-world secrets, tokens, or production data. Use minimal test data whenever possible.
 
-If no private security contact is available yet, open a minimal public issue that says you have a security concern and ask for a private reporting channel. Do not include exploit details in that public issue.
+If GitHub's private reporting form is temporarily unavailable, open a minimal [public issue](https://github.com/gkmz/sharp/issues/new/choose) asking for a private maintainer channel. Do not include vulnerability details, exploit code, secrets, or sensitive data in that issue.
 
 ## Security Scope
 

@@ -1,5 +1,7 @@
 # sharp Development Plan
 
+> **Status: historical design document.** This plan records the original path used to build Sharp before v0.1.0. Its bootstrap milestones and version allocation are not current work instructions. For implemented behavior, use the [README](../README.md); for planned tools, use the README's [Tool Roadmap](../README.md#tool-roadmap); for active work, use the repository's [issues](https://github.com/gkmz/sharp/issues).
+
 ## 1. Development Strategy
 
 Build `sharp` in thin vertical slices:
@@ -367,13 +369,8 @@ Contents:
 - URL parser
 - Config, favorites, and history
 
-## 7. Immediate Next Task
+## 7. Current Status
 
-Implement Milestone 0:
+The bootstrap and MVP milestones in this document informed the v0.1.0 implementation and are complete. Some capabilities originally allocated to later versions also shipped in v0.1.0, so the version groupings above must not be treated as release commitments.
 
-- Initialize the Go module.
-- Add Cobra root command.
-- Add Bubble Tea minimal app.
-- Add shared tool registry.
-- Add one sample tool.
-- Verify with `go test ./...` and `go run ./cmd/sharp --help`.
+Current development should start from the [Tool Roadmap](../README.md#tool-roadmap), an accepted issue, or a maintainer-approved proposal. Validate changes with `make verify` and follow the [Contributing Guide](CONTRIBUTING.md).

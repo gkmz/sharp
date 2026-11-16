@@ -14,7 +14,7 @@
 [![TUI](https://img.shields.io/badge/TUI-Bubble%20Tea-FF75B7?style=for-the-badge)](https://github.com/charmbracelet/bubbletea)
 [![CLI](https://img.shields.io/badge/CLI-Cobra-6F42C1?style=for-the-badge)](https://github.com/spf13/cobra)
 [![状态](https://img.shields.io/badge/Status-Pre--1.0-orange?style=for-the-badge)](CHANGELOG.zh-CN.md)
-[![测试](https://img.shields.io/badge/Tests-go%20test%20%2F%20go%20vet-success?style=for-the-badge)](#开发)
+[![CI](https://github.com/gkmz/sharp/actions/workflows/go.yml/badge.svg)](https://github.com/gkmz/sharp/actions/workflows/go.yml)
 
 [英文文档](../README.md)
 
@@ -32,9 +32,19 @@
 | ![Tools](https://img.shields.io/badge/Tools-built--in-blue) | 覆盖 JSON、Encode、Crypto、Time、Text、Network、Convert、Inspector、Generator 工作流。 |
 | ![Local](https://img.shields.io/badge/Local-first-lightgrey) | 核心转换都在本地运行，不依赖远程服务。 |
 
+![Sharp TUI 演示](assets/sharp-demo.gif)
+
 ## 安装
 
-从本地仓库安装，或用 `go install github.com/gkmz/sharp/cmd/sharp@main` 体验 main 分支，需要 Go 1.25.1+：
+Sharp 需要 Go 1.25.1 或更高版本。安装最新稳定版：
+
+```bash
+go install github.com/gkmz/sharp/cmd/sharp@latest
+```
+
+将 `@latest` 替换成 `@v0.1.0` 可安装首个固定版本，替换成 `@main` 可体验当前开发分支。
+
+从本地仓库安装：
 
 ```bash
 git clone https://github.com/gkmz/sharp.git
@@ -52,12 +62,12 @@ sharp version
 
 将 export 写入 shell 启动文件，zsh 使用 `~/.zshrc`。自定义 GOBIN 时应添加相应目录。如果仍执行 `/usr/local/bin/sharp`，用 `type -a sharp` 检查优先级，并刷新命令缓存（zsh 用 `rehash`）。更新本地代码后重新运行 `go install ./cmd/sharp` 即可。
 
-已发布版本见 [GitHub Releases](https://github.com/gkmz/sharp/releases)。安装包面向 macOS/Linux 的 amd64、arm64，包含 LICENSE、中英文 README 和 `checksums.txt`。版本标签可用后，Go 用户可以用 `go install github.com/gkmz/sharp/cmd/sharp@v0.1.0` 安装固定版本，或用 `@latest` 安装最新稳定模块版本。Homebrew 分发后续单独补充。
+已发布版本见 [GitHub Releases](https://github.com/gkmz/sharp/releases)。安装包面向 macOS/Linux 的 amd64、arm64，包含 LICENSE 和中英文 README；每个 Release 还会提供 `checksums.txt`。Homebrew 分发后续单独补充。
 
 Apple Silicon 选择 `darwin_arm64`，Intel Mac 选择 `darwin_amd64`，Linux 按系统和架构选择（`uname -s; uname -m`）。将压缩包与同一 Release 的 `checksums.txt` 下载到空目录，再校验所选文件。以下是首次 Apple Silicon 发布后的安装示例：
 
 ```bash
-# 仅在 v0.1.0 正式发布并下载后执行：
+# 下载 v0.1.0 压缩包和 checksums.txt 后执行：
 grep '  sharp_0.1.0_darwin_arm64.tar.gz$' checksums.txt | shasum -a 256 -c -
 tar -xzf sharp_0.1.0_darwin_arm64.tar.gz
 mkdir -p "$HOME/.local/bin"
@@ -73,6 +83,38 @@ Linux 替换为对应的文件名，用 `sha256sum -c -` 校验。校验和用�
 ```bash
 go run ./cmd/sharp
 ```
+
+### 更新或卸载
+
+更新通过 Go 安装的版本：
+
+```bash
+go install github.com/gkmz/sharp/cmd/sharp@latest
+```
+
+本地仓库安装的版本需要先切换到目标代码，再重新执行 `go install ./cmd/sharp`。卸载 Go 安装的二进制前，先解析实际安装目录：
+
+```bash
+install_dir="$(go env GOBIN)"
+[ -n "$install_dir" ] || install_dir="$(go env GOPATH)/bin"
+rm "$install_dir/sharp"
+```
+
+如果按照上方压缩包示例安装，则删除 `$HOME/.local/bin/sharp`。
+
+## 快速上手
+
+可以启动 TUI，也可以直接从 shell 调用同一套工具：
+
+```bash
+sharp
+sharp list
+echo '{"data":{"id":1}}' | sharp json get --path data.id
+sharp url encode --mode component '^@#$ a+b'
+sharp token --bytes 32 --format base64url
+```
+
+使用 `sharp --help`、`sharp <分组> --help` 或 `sharp <命令> --help` 查看命令和参数。Sharp 支持 Bash、Zsh、Fish 和 PowerShell 补全；运行 `sharp completion <shell> --help` 查看对应 shell 的安装方法。
 
 ## TUI 使用
 
@@ -366,7 +408,11 @@ docs                   产品和开发说明
 - [变更日志](CHANGELOG.zh-CN.md)
 - [版本发布指南](RELEASING.zh-CN.md)
 - [产品需求](PRD.md)
-- [开发计划](DEVELOPMENT_PLAN.md)
+- [历史开发计划](DEVELOPMENT_PLAN.md)
+
+## 支持
+
+提交问题前请先搜索已有 issue。可使用 [issue 模板](https://github.com/gkmz/sharp/issues/new/choose)报告可复现问题或提出功能建议。安全漏洞应按照[安全策略](SECURITY.zh-CN.md)私密报告，不要在公开 issue 中包含漏洞细节。
 
 ## 许可证
 
